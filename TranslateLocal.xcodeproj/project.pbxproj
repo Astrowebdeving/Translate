@@ -6,8 +6,65 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		F0B6EC672F10755600D19E93 /* supported_languages.json in Resources */ = {isa = PBXBuildFile; fileRef = F0B6EC612F10755600D19E93 /* supported_languages.json */; };
+		F0B6EC682F10755600D19E93 /* Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = F0B6EC412F10755600D19E93 /* Info.plist */; };
+		F0B6EC692F10755600D19E93 /* convert_opus_to_coreml.py in Resources */ = {isa = PBXBuildFile; fileRef = F0B6EC5C2F10755600D19E93 /* convert_opus_to_coreml.py */; };
+		F0B6EC6A2F10755600D19E93 /* .gitkeep in Resources */ = {isa = PBXBuildFile; fileRef = F0B6EC632F10755600D19E93 /* .gitkeep */; };
+		F0B6EC6B2F10755600D19E93 /* setup_xcode.sh in Resources */ = {isa = PBXBuildFile; fileRef = F0B6EC662F10755600D19E93 /* setup_xcode.sh */; };
+		F0B6EC6C2F10755600D19E93 /* Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = F0B6EC4A2F10755600D19E93 /* Info.plist */; };
+		F0B6EC6D2F10755600D19E93 /* ARCHITECTURE.md in Resources */ = {isa = PBXBuildFile; fileRef = F0B6EC3E2F10755600D19E93 /* ARCHITECTURE.md */; };
+		F0B6EC6E2F10755600D19E93 /* convert_gemma_to_coreml.py in Resources */ = {isa = PBXBuildFile; fileRef = F0B6EC5B2F10755600D19E93 /* convert_gemma_to_coreml.py */; };
+		F0B6EC6F2F10755600D19E93 /* test_conversion.py in Resources */ = {isa = PBXBuildFile; fileRef = F0B6EC5E2F10755600D19E93 /* test_conversion.py */; };
+		F0B6EC702F10755600D19E93 /* Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = F0B6EC432F10755600D19E93 /* Info.plist */; };
+		F0B6EC712F10755600D19E93 /* GETTING_STARTED.md in Resources */ = {isa = PBXBuildFile; fileRef = F0B6EC3F2F10755600D19E93 /* GETTING_STARTED.md */; };
+		F0B6EC722F10755600D19E93 /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = F0B6EC602F10755600D19E93 /* README.md */; };
+		F0B6EC732F10755600D19E93 /* requirements.txt in Resources */ = {isa = PBXBuildFile; fileRef = F0B6EC5D2F10755600D19E93 /* requirements.txt */; };
+		F0B6EC742F10755600D19E93 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0B6EC442F10755600D19E93 /* ShareViewController.swift */; };
+		F0B6EC752F10755600D19E93 /* CameraViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0B6EC502F10755600D19E93 /* CameraViewModel.swift */; };
+		F0B6EC762F10755600D19E93 /* TranslateLocalApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0B6EC462F10755600D19E93 /* TranslateLocalApp.swift */; };
+		F0B6EC772F10755600D19E93 /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0B6EC552F10755600D19E93 /* HistoryView.swift */; };
+		F0B6EC782F10755600D19E93 /* ImageTranslateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0B6EC562F10755600D19E93 /* ImageTranslateView.swift */; };
+		F0B6EC792F10755600D19E93 /* TranslationViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0B6EC512F10755600D19E93 /* TranslationViewModel.swift */; };
+		F0B6EC7A2F10755600D19E93 /* CameraTranslateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0B6EC532F10755600D19E93 /* CameraTranslateView.swift */; };
+		F0B6EC7B2F10755600D19E93 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0B6EC572F10755600D19E93 /* SettingsView.swift */; };
+		F0B6EC7C2F10755600D19E93 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0B6EC542F10755600D19E93 /* ContentView.swift */; };
+		F0B6EC7D2F10755600D19E93 /* ModelManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0B6EC4C2F10755600D19E93 /* ModelManager.swift */; };
+		F0B6EC7E2F10755600D19E93 /* ActionViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0B6EC402F10755600D19E93 /* ActionViewController.swift */; };
+		F0B6EC7F2F10755600D19E93 /* OCRService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0B6EC4D2F10755600D19E93 /* OCRService.swift */; };
+		F0B6EC802F10755600D19E93 /* TranslationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0B6EC4E2F10755600D19E93 /* TranslationService.swift */; };
+		F0B6EC812F10755600D19E93 /* TranslationResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0B6EC482F10755600D19E93 /* TranslationResult.swift */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		F0B6EC302F10751900D19E93 /* TranslateLocal.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TranslateLocal.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F0B6EC3E2F10755600D19E93 /* ARCHITECTURE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = ARCHITECTURE.md; sourceTree = "<group>"; };
+		F0B6EC3F2F10755600D19E93 /* GETTING_STARTED.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = GETTING_STARTED.md; sourceTree = "<group>"; };
+		F0B6EC402F10755600D19E93 /* ActionViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionViewController.swift; sourceTree = "<group>"; };
+		F0B6EC412F10755600D19E93 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		F0B6EC432F10755600D19E93 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		F0B6EC442F10755600D19E93 /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
+		F0B6EC462F10755600D19E93 /* TranslateLocalApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranslateLocalApp.swift; sourceTree = "<group>"; };
+		F0B6EC482F10755600D19E93 /* TranslationResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranslationResult.swift; sourceTree = "<group>"; };
+		F0B6EC4A2F10755600D19E93 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		F0B6EC4C2F10755600D19E93 /* ModelManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelManager.swift; sourceTree = "<group>"; };
+		F0B6EC4D2F10755600D19E93 /* OCRService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OCRService.swift; sourceTree = "<group>"; };
+		F0B6EC4E2F10755600D19E93 /* TranslationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranslationService.swift; sourceTree = "<group>"; };
+		F0B6EC502F10755600D19E93 /* CameraViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraViewModel.swift; sourceTree = "<group>"; };
+		F0B6EC512F10755600D19E93 /* TranslationViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranslationViewModel.swift; sourceTree = "<group>"; };
+		F0B6EC532F10755600D19E93 /* CameraTranslateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraTranslateView.swift; sourceTree = "<group>"; };
+		F0B6EC542F10755600D19E93 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		F0B6EC552F10755600D19E93 /* HistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryView.swift; sourceTree = "<group>"; };
+		F0B6EC562F10755600D19E93 /* ImageTranslateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageTranslateView.swift; sourceTree = "<group>"; };
+		F0B6EC572F10755600D19E93 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		F0B6EC5B2F10755600D19E93 /* convert_gemma_to_coreml.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = convert_gemma_to_coreml.py; sourceTree = "<group>"; };
+		F0B6EC5C2F10755600D19E93 /* convert_opus_to_coreml.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = convert_opus_to_coreml.py; sourceTree = "<group>"; };
+		F0B6EC5D2F10755600D19E93 /* requirements.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = requirements.txt; sourceTree = "<group>"; };
+		F0B6EC5E2F10755600D19E93 /* test_conversion.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = test_conversion.py; sourceTree = "<group>"; };
+		F0B6EC602F10755600D19E93 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
+		F0B6EC612F10755600D19E93 /* supported_languages.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = supported_languages.json; sourceTree = "<group>"; };
+		F0B6EC632F10755600D19E93 /* .gitkeep */ = {isa = PBXFileReference; lastKnownFileType = text; path = .gitkeep; sourceTree = "<group>"; };
+		F0B6EC662F10755600D19E93 /* setup_xcode.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = setup_xcode.sh; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -34,6 +91,13 @@
 			children = (
 				F0B6EC322F10751900D19E93 /* TranslateLocal */,
 				F0B6EC312F10751900D19E93 /* Products */,
+				F0B6EC3E2F10755600D19E93 /* ARCHITECTURE.md */,
+				F0B6EC3F2F10755600D19E93 /* GETTING_STARTED.md */,
+				F0B6EC5A2F10755600D19E93 /* iOS */,
+				F0B6EC5F2F10755600D19E93 /* MLModels */,
+				F0B6EC602F10755600D19E93 /* README.md */,
+				F0B6EC652F10755600D19E93 /* Resources */,
+				F0B6EC662F10755600D19E93 /* setup_xcode.sh */,
 			);
 			sourceTree = "<group>";
 		};
@@ -43,6 +107,138 @@
 				F0B6EC302F10751900D19E93 /* TranslateLocal.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		F0B6EC422F10755600D19E93 /* ActionExtension */ = {
+			isa = PBXGroup;
+			children = (
+				F0B6EC402F10755600D19E93 /* ActionViewController.swift */,
+				F0B6EC412F10755600D19E93 /* Info.plist */,
+			);
+			path = ActionExtension;
+			sourceTree = "<group>";
+		};
+		F0B6EC452F10755600D19E93 /* ShareExtension */ = {
+			isa = PBXGroup;
+			children = (
+				F0B6EC432F10755600D19E93 /* Info.plist */,
+				F0B6EC442F10755600D19E93 /* ShareViewController.swift */,
+			);
+			path = ShareExtension;
+			sourceTree = "<group>";
+		};
+		F0B6EC472F10755600D19E93 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				F0B6EC462F10755600D19E93 /* TranslateLocalApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		F0B6EC492F10755600D19E93 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				F0B6EC482F10755600D19E93 /* TranslationResult.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		F0B6EC4B2F10755600D19E93 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				F0B6EC4A2F10755600D19E93 /* Info.plist */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		F0B6EC4F2F10755600D19E93 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				F0B6EC4C2F10755600D19E93 /* ModelManager.swift */,
+				F0B6EC4D2F10755600D19E93 /* OCRService.swift */,
+				F0B6EC4E2F10755600D19E93 /* TranslationService.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		F0B6EC522F10755600D19E93 /* ViewModels */ = {
+			isa = PBXGroup;
+			children = (
+				F0B6EC502F10755600D19E93 /* CameraViewModel.swift */,
+				F0B6EC512F10755600D19E93 /* TranslationViewModel.swift */,
+			);
+			path = ViewModels;
+			sourceTree = "<group>";
+		};
+		F0B6EC582F10755600D19E93 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				F0B6EC532F10755600D19E93 /* CameraTranslateView.swift */,
+				F0B6EC542F10755600D19E93 /* ContentView.swift */,
+				F0B6EC552F10755600D19E93 /* HistoryView.swift */,
+				F0B6EC562F10755600D19E93 /* ImageTranslateView.swift */,
+				F0B6EC572F10755600D19E93 /* SettingsView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		F0B6EC592F10755600D19E93 /* TranslateLocal */ = {
+			isa = PBXGroup;
+			children = (
+				F0B6EC472F10755600D19E93 /* App */,
+				F0B6EC492F10755600D19E93 /* Models */,
+				F0B6EC4B2F10755600D19E93 /* Resources */,
+				F0B6EC4F2F10755600D19E93 /* Services */,
+				F0B6EC522F10755600D19E93 /* ViewModels */,
+				F0B6EC582F10755600D19E93 /* Views */,
+			);
+			path = TranslateLocal;
+			sourceTree = "<group>";
+		};
+		F0B6EC5A2F10755600D19E93 /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				F0B6EC422F10755600D19E93 /* ActionExtension */,
+				F0B6EC452F10755600D19E93 /* ShareExtension */,
+				F0B6EC592F10755600D19E93 /* TranslateLocal */,
+			);
+			path = iOS;
+			sourceTree = "<group>";
+		};
+		F0B6EC5F2F10755600D19E93 /* MLModels */ = {
+			isa = PBXGroup;
+			children = (
+				F0B6EC5B2F10755600D19E93 /* convert_gemma_to_coreml.py */,
+				F0B6EC5C2F10755600D19E93 /* convert_opus_to_coreml.py */,
+				F0B6EC5D2F10755600D19E93 /* requirements.txt */,
+				F0B6EC5E2F10755600D19E93 /* test_conversion.py */,
+			);
+			path = MLModels;
+			sourceTree = "<group>";
+		};
+		F0B6EC622F10755600D19E93 /* Languages */ = {
+			isa = PBXGroup;
+			children = (
+				F0B6EC612F10755600D19E93 /* supported_languages.json */,
+			);
+			path = Languages;
+			sourceTree = "<group>";
+		};
+		F0B6EC642F10755600D19E93 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				F0B6EC632F10755600D19E93 /* .gitkeep */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		F0B6EC652F10755600D19E93 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				F0B6EC622F10755600D19E93 /* Languages */,
+				F0B6EC642F10755600D19E93 /* Models */,
+			);
+			path = Resources;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -109,6 +305,19 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F0B6EC672F10755600D19E93 /* supported_languages.json in Resources */,
+				F0B6EC682F10755600D19E93 /* Info.plist in Resources */,
+				F0B6EC692F10755600D19E93 /* convert_opus_to_coreml.py in Resources */,
+				F0B6EC6A2F10755600D19E93 /* .gitkeep in Resources */,
+				F0B6EC6B2F10755600D19E93 /* setup_xcode.sh in Resources */,
+				F0B6EC6C2F10755600D19E93 /* Info.plist in Resources */,
+				F0B6EC6D2F10755600D19E93 /* ARCHITECTURE.md in Resources */,
+				F0B6EC6E2F10755600D19E93 /* convert_gemma_to_coreml.py in Resources */,
+				F0B6EC6F2F10755600D19E93 /* test_conversion.py in Resources */,
+				F0B6EC702F10755600D19E93 /* Info.plist in Resources */,
+				F0B6EC712F10755600D19E93 /* GETTING_STARTED.md in Resources */,
+				F0B6EC722F10755600D19E93 /* README.md in Resources */,
+				F0B6EC732F10755600D19E93 /* requirements.txt in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -119,10 +328,28 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F0B6EC742F10755600D19E93 /* ShareViewController.swift in Sources */,
+				F0B6EC752F10755600D19E93 /* CameraViewModel.swift in Sources */,
+				F0B6EC762F10755600D19E93 /* TranslateLocalApp.swift in Sources */,
+				F0B6EC772F10755600D19E93 /* HistoryView.swift in Sources */,
+				F0B6EC782F10755600D19E93 /* ImageTranslateView.swift in Sources */,
+				F0B6EC792F10755600D19E93 /* TranslationViewModel.swift in Sources */,
+				F0B6EC7A2F10755600D19E93 /* CameraTranslateView.swift in Sources */,
+				F0B6EC7B2F10755600D19E93 /* SettingsView.swift in Sources */,
+				F0B6EC7C2F10755600D19E93 /* ContentView.swift in Sources */,
+				F0B6EC7D2F10755600D19E93 /* ModelManager.swift in Sources */,
+				F0B6EC7E2F10755600D19E93 /* ActionViewController.swift in Sources */,
+				F0B6EC7F2F10755600D19E93 /* OCRService.swift in Sources */,
+				F0B6EC802F10755600D19E93 /* TranslationService.swift in Sources */,
+				F0B6EC812F10755600D19E93 /* TranslationResult.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXFileReference section - Entitlements */
+		F0B6EC822F10755600D19E93 /* TranslateLocal.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = TranslateLocal.entitlements; sourceTree = "<group>"; };
+/* End PBXFileReference section - Entitlements */
 
 /* Begin XCBuildConfiguration section */
 		F0B6EC392F10751B00D19E93 /* Debug */ = {
@@ -249,10 +476,14 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = TranslateLocal/TranslateLocal.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = iOS/TranslateLocal/Resources/Info.plist;
+				INFOPLIST_KEY_NSCameraUsageDescription = "TranslateLocal needs camera access to recognize and translate text in real-time. All processing happens on your device.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "TranslateLocal needs photo library access to translate text from your images. Selected photos are processed locally and never uploaded.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -280,10 +511,14 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = TranslateLocal/TranslateLocal.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = iOS/TranslateLocal/Resources/Info.plist;
+				INFOPLIST_KEY_NSCameraUsageDescription = "TranslateLocal needs camera access to recognize and translate text in real-time. All processing happens on your device.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "TranslateLocal needs photo library access to translate text from your images. Selected photos are processed locally and never uploaded.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

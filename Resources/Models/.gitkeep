@@ -1,0 +1,10 @@
+# This directory is for converted Core ML models
+# Models are not committed to git due to their size
+# 
+# After running the conversion scripts, place the .mlpackage files here:
+# - Gemma3nE2B.mlpackage
+# - OpusMT_en_ja.mlpackage
+# - OpusMT_en_zh.mlpackage
+# - etc.
+#
+# Then add them to your Xcode project.

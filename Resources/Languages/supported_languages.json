@@ -1,0 +1,180 @@
+{
+  "version": "1.0.0",
+  "last_updated": "2025-01-08",
+  "languages": [
+    {
+      "code": "en",
+      "name": "English",
+      "native_name": "English",
+      "direction": "ltr",
+      "supported_models": ["gemma3n", "opus"],
+      "is_default_source": true
+    },
+    {
+      "code": "ja",
+      "name": "Japanese",
+      "native_name": "日本語",
+      "direction": "ltr",
+      "supported_models": ["gemma3n", "opus"],
+      "is_default_target": true
+    },
+    {
+      "code": "zh",
+      "name": "Chinese (Simplified)",
+      "native_name": "简体中文",
+      "direction": "ltr",
+      "supported_models": ["gemma3n", "opus"],
+      "locale_variants": ["zh-Hans", "zh-CN"]
+    },
+    {
+      "code": "zh-Hant",
+      "name": "Chinese (Traditional)",
+      "native_name": "繁體中文",
+      "direction": "ltr",
+      "supported_models": ["gemma3n"],
+      "locale_variants": ["zh-TW", "zh-HK"]
+    },
+    {
+      "code": "ko",
+      "name": "Korean",
+      "native_name": "한국어",
+      "direction": "ltr",
+      "supported_models": ["gemma3n", "opus"]
+    },
+    {
+      "code": "es",
+      "name": "Spanish",
+      "native_name": "Español",
+      "direction": "ltr",
+      "supported_models": ["gemma3n", "opus"]
+    },
+    {
+      "code": "fr",
+      "name": "French",
+      "native_name": "Français",
+      "direction": "ltr",
+      "supported_models": ["gemma3n", "opus"]
+    },
+    {
+      "code": "de",
+      "name": "German",
+      "native_name": "Deutsch",
+      "direction": "ltr",
+      "supported_models": ["gemma3n", "opus"]
+    },
+    {
+      "code": "pt",
+      "name": "Portuguese",
+      "native_name": "Português",
+      "direction": "ltr",
+      "supported_models": ["gemma3n", "opus"]
+    },
+    {
+      "code": "ru",
+      "name": "Russian",
+      "native_name": "Русский",
+      "direction": "ltr",
+      "supported_models": ["gemma3n", "opus"]
+    },
+    {
+      "code": "ar",
+      "name": "Arabic",
+      "native_name": "العربية",
+      "direction": "rtl",
+      "supported_models": ["gemma3n", "opus"]
+    },
+    {
+      "code": "hi",
+      "name": "Hindi",
+      "native_name": "हिन्दी",
+      "direction": "ltr",
+      "supported_models": ["gemma3n", "opus"]
+    },
+    {
+      "code": "th",
+      "name": "Thai",
+      "native_name": "ไทย",
+      "direction": "ltr",
+      "supported_models": ["gemma3n"]
+    },
+    {
+      "code": "vi",
+      "name": "Vietnamese",
+      "native_name": "Tiếng Việt",
+      "direction": "ltr",
+      "supported_models": ["gemma3n"]
+    },
+    {
+      "code": "it",
+      "name": "Italian",
+      "native_name": "Italiano",
+      "direction": "ltr",
+      "supported_models": ["gemma3n", "opus"]
+    },
+    {
+      "code": "nl",
+      "name": "Dutch",
+      "native_name": "Nederlands",
+      "direction": "ltr",
+      "supported_models": ["gemma3n", "opus"]
+    },
+    {
+      "code": "pl",
+      "name": "Polish",
+      "native_name": "Polski",
+      "direction": "ltr",
+      "supported_models": ["gemma3n"]
+    },
+    {
+      "code": "tr",
+      "name": "Turkish",
+      "native_name": "Türkçe",
+      "direction": "ltr",
+      "supported_models": ["gemma3n"]
+    },
+    {
+      "code": "uk",
+      "name": "Ukrainian",
+      "native_name": "Українська",
+      "direction": "ltr",
+      "supported_models": ["gemma3n"]
+    },
+    {
+      "code": "id",
+      "name": "Indonesian",
+      "native_name": "Bahasa Indonesia",
+      "direction": "ltr",
+      "supported_models": ["gemma3n"]
+    }
+  ],
+  "model_capabilities": {
+    "gemma3n": {
+      "name": "Gemma 3n E2B",
+      "type": "multilingual",
+      "supports_all_pairs": true,
+      "quality_tier": "high",
+      "size_mb": 800,
+      "min_ios_version": "17.0"
+    },
+    "opus": {
+      "name": "Opus-MT",
+      "type": "bilingual",
+      "supports_all_pairs": false,
+      "quality_tier": "high",
+      "size_mb": 50,
+      "note": "Each language pair requires separate model download"
+    }
+  },
+  "ocr_languages": [
+    "en-US", "en-GB",
+    "ja-JP",
+    "zh-Hans", "zh-Hant",
+    "ko-KR",
+    "es-ES", "es-MX",
+    "fr-FR",
+    "de-DE",
+    "pt-BR", "pt-PT",
+    "ru-RU",
+    "it-IT"
+  ]
+}
