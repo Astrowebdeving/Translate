@@ -24,6 +24,9 @@ targets:
           - "**/.DS_Store"
           - "**/Info.plist"
           - "Resources/**"
+      - path: iOS/Shared
+        excludes:
+          - "**/.DS_Store"
     resources:
       - path: TranslateLocal/Assets.xcassets
     settings:
@@ -34,13 +37,6 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         GENERATE_INFOPLIST_FILE: NO
-    entitlements:
-      path: TranslateLocal/TranslateLocal.entitlements
-      properties:
-        com.apple.security.application-groups:
-          - group.com.translatelocal.shared
-        # Camera and media permissions (handled via Info.plist privacy descriptions)
-        # No additional entitlements needed for camera/photo access
     dependencies:
       - target: ShareExtension
         embed: true
@@ -48,6 +44,11 @@ targets:
         copyPhase:
           destination: plugins
       - target: ActionExtension
+        embed: true
+        codeSign: true
+        copyPhase:
+          destination: plugins
+      - target: BroadcastExtension
         embed: true
         codeSign: true
         copyPhase:
@@ -70,12 +71,6 @@ targets:
         CODE_SIGN_ENTITLEMENTS: iOS/ShareExtension/ShareExtension.entitlements
         SKIP_INSTALL: YES
         GENERATE_INFOPLIST_FILE: NO
-    entitlements:
-      path: iOS/ShareExtension/ShareExtension.entitlements
-      properties:
-        com.apple.security.application-groups:
-          - group.com.translatelocal.shared
-
   ActionExtension:
     type: app-extension
     platform: iOS
@@ -93,12 +88,27 @@ targets:
         CODE_SIGN_ENTITLEMENTS: iOS/ActionExtension/ActionExtension.entitlements
         SKIP_INSTALL: YES
         GENERATE_INFOPLIST_FILE: NO
-    entitlements:
-      path: iOS/ActionExtension/ActionExtension.entitlements
-      properties:
-        com.apple.security.application-groups:
-          - group.com.translatelocal.shared
-
+  BroadcastExtension:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: iOS/BroadcastExtension
+        excludes:
+          - "**/.DS_Store"
+          - "**/Info.plist"
+          - "*.entitlements"
+      - path: iOS/Shared
+        excludes:
+          - "**/.DS_Store"
+    settings:
+      base:
+        INFOPLIST_FILE: iOS/BroadcastExtension/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: oceania1984.InIndiana.AWT.TranslateLocal.BroadcastExtension
+        CODE_SIGN_ENTITLEMENTS: iOS/BroadcastExtension/BroadcastExtension.entitlements
+        SKIP_INSTALL: YES
+        GENERATE_INFOPLIST_FILE: NO
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks"
 schemes:
   TranslateLocal:
     build:
@@ -106,6 +116,7 @@ schemes:
         TranslateLocal: all
         ShareExtension: all
         ActionExtension: all
+        BroadcastExtension: all
     run:
       config: Debug
     test:

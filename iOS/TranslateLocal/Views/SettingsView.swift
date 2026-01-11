@@ -50,12 +50,26 @@ struct SettingsView: View {
                 // Model Management
                 Section {
                     NavigationLink {
+                        ModelDownloadView()
+                    } label: {
+                        HStack {
+                            SettingsIcon(icon: "icloud.and.arrow.down", color: .blue)
+                            VStack(alignment: .leading) {
+                                Text("Download Models")
+                                Text("Get translation models from HuggingFace")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                    
+                    NavigationLink {
                         ModelManagementView()
                     } label: {
                         HStack {
                             SettingsIcon(icon: "cpu", color: .green)
                             VStack(alignment: .leading) {
-                                Text("AI Models")
+                                Text("Manage Models")
                                 Text("\(appState.modelManager.loadedModels.count) loaded")
                                     .font(.caption)
                                     .foregroundColor(.secondary)
@@ -63,9 +77,9 @@ struct SettingsView: View {
                         }
                     }
                 } header: {
-                    Text("Models")
+                    Text("Translation Models")
                 } footer: {
-                    Text("Manage translation models stored on your device")
+                    Text("Download models to enable offline translation. Models use Helsinki-NLP Opus-MT architecture.")
                 }
                 
                 // App Behavior
@@ -138,6 +152,7 @@ struct SettingsView: View {
             }
             .navigationTitle("Settings")
         }
+        .navigationViewStyle(.stack)  // Fix for iPad navigation issues
     }
 }
 

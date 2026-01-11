@@ -14,17 +14,17 @@ struct ContentView: View {
     
     enum Tab: String, CaseIterable {
         case camera = "Camera"
+        case screen = "Screen"
         case image = "Image"
         case translate = "Translate"
-        case glossary = "Glossary"
         case settings = "Settings"
         
         var icon: String {
             switch self {
             case .camera: return "camera.viewfinder"
+            case .screen: return "rectangle.inset.filled.and.person.filled"
             case .image: return "photo.on.rectangle"
             case .translate: return "textformat"
-            case .glossary: return "text.book.closed"
             case .settings: return "gearshape"
             }
         }
@@ -37,6 +37,12 @@ struct ContentView: View {
                     Label(Tab.camera.rawValue, systemImage: Tab.camera.icon)
                 }
                 .tag(Tab.camera)
+            
+            ScreenTranslateView()
+                .tabItem {
+                    Label(Tab.screen.rawValue, systemImage: Tab.screen.icon)
+                }
+                .tag(Tab.screen)
             
             ImageTranslateView()
                 .tabItem {
@@ -56,12 +62,6 @@ struct ContentView: View {
                 Label(Tab.translate.rawValue, systemImage: Tab.translate.icon)
             }
             .tag(Tab.translate)
-            
-            GlossaryView()
-                .tabItem {
-                    Label(Tab.glossary.rawValue, systemImage: Tab.glossary.icon)
-                }
-                .tag(Tab.glossary)
             
             SettingsView()
                 .tabItem {

@@ -79,10 +79,11 @@
         <string>group.com.translatelocal.shared</string>
     </array>
     
-    <!-- Background Modes -->
+    <!-- Background Modes for PiP and Screen Translation -->
     <key>UIBackgroundModes</key>
     <array>
         <string>processing</string>
+        <string>audio</string>
     </array>
 </dict>
 </plist>

@@ -46,10 +46,12 @@ TranslateLocal is an iOS application that provides **on-device text translation*
 | Feature | Description |
 |---------|-------------|
 | 📷 **Camera Translation** | Point your camera at any text for real-time translation |
+| 📺 **Screen Translation** | Translate text from ANY app with floating PiP window |
 | 🖼️ **Screenshot Translation** | Share screenshots from any app for instant translation |
 | 🔤 **Text Selection** | Translate selected text in Safari and other apps via Action Extension |
-| 🌐 **In-App Browser** | Browse with translation overlay |
+| ⬇️ **Model Downloads** | Download Opus-MT models from HuggingFace for offline use |
 | 📜 **History** | Track your translation history locally |
+| 🐞 **Debug Tools** | Built-in logging and diagnostic tools for troubleshooting |
 
 ---
 
@@ -185,11 +187,16 @@ Finally, we show the translation:
 **Screen Capture Restrictions:**
 - iOS sandboxing **prevents apps from capturing other apps' screens** for privacy
 - The "translate on scroll" feature for arbitrary apps is **not possible** via traditional screen capture
-- **Alternative approaches** (all implemented in this project):
-  1. **Camera Mode**: Point iPhone camera at any screen (including another device)
-  2. **Share Extension**: Share screenshots/text from any app
-  3. **Action Extension**: Translate selected text in compatible apps
-  4. **In-App Browser**: Full translation support while browsing
+- **Solution Implemented - Broadcast Upload Extension**:
+  1. **📺 Screen Translation Mode**: Uses iOS Screen Recording + Broadcast Extension
+     - User starts screen recording and selects TranslateLocal
+     - Broadcast Extension captures frames and performs OCR
+     - Main app displays translations in a floating PiP window
+     - Works with ANY app (Safari, QQ Reader, WeChat, etc.)
+  2. **Camera Mode**: Point iPhone camera at any screen (including another device)
+  3. **Share Extension**: Share screenshots/text from any app
+  4. **Action Extension**: Translate selected text in compatible apps
+  5. **In-App Browser**: Full translation support while browsing
 
 ### 📊 Model Considerations
 
@@ -216,36 +223,52 @@ Finally, we show the translation:
 ## 🏗️ Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                         TranslateLocal                          │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐  │
-│  │   Camera     │  │    Share     │  │       Action         │  │
-│  │    View      │  │  Extension   │  │      Extension       │  │
-│  └──────┬───────┘  └──────┬───────┘  └──────────┬───────────┘  │
-│         │                 │                      │              │
-│         └─────────────────┼──────────────────────┘              │
-│                           │                                     │
-│                           ▼                                     │
-│              ┌────────────────────────┐                         │
-│              │   OCR Service          │                         │
-│              │   (Vision Framework)   │                         │
-│              └───────────┬────────────┘                         │
-│                          │                                      │
-│                          ▼                                      │
-│              ┌────────────────────────┐                         │
-│              │  Translation Service   │                         │
-│              │   (Core ML + Gemma)    │                         │
-│              └───────────┬────────────┘                         │
-│                          │                                      │
-│                          ▼                                      │
-│              ┌────────────────────────┐                         │
-│              │   Result Display       │                         │
-│              │   (SwiftUI Overlay)    │                         │
-│              └────────────────────────┘                         │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              TranslateLocal                                  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌───────────┐  ┌───────────┐  ┌───────────┐  ┌───────────┐  ┌───────────┐ │
+│  │  Camera   │  │  Screen   │  │   Image   │  │   Share   │  │  Action   │ │
+│  │   View    │  │   View    │  │   View    │  │ Extension │  │ Extension │ │
+│  └─────┬─────┘  └─────┬─────┘  └─────┬─────┘  └─────┬─────┘  └─────┬─────┘ │
+│        │              │              │              │              │        │
+│        └──────────────┼──────────────┼──────────────┴──────────────┘        │
+│                       │              │                                      │
+│                       ▼              ▼                                      │
+│        ┌────────────────────────────────────────────┐                       │
+│        │             OCR Service                    │                       │
+│        │         (Vision Framework)                 │                       │
+│        └───────────────────┬────────────────────────┘                       │
+│                            │                                                │
+│                            ▼                                                │
+│        ┌────────────────────────────────────────────┐                       │
+│        │          Translation Service               │                       │
+│        │    (Core ML + Opus-MT / Gemma-3n)          │                       │
+│        └───────────────────┬────────────────────────┘                       │
+│                            │                                                │
+│        ┌───────────────────┼───────────────────┐                            │
+│        ▼                   ▼                   ▼                            │
+│  ┌───────────┐      ┌───────────┐      ┌───────────┐                        │
+│  │  Overlay  │      │    PiP    │      │  History  │                        │
+│  │  Display  │      │  Service  │      │  Storage  │                        │
+│  └───────────┘      └───────────┘      └───────────┘                        │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    │ App Group
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        Broadcast Upload Extension                            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  ┌─────────────────────────────────────────────────┐                        │
+│  │  SampleHandler (RPBroadcastSampleHandler)       │                        │
+│  │  - Receives screen frames at 60fps              │                        │
+│  │  - Throttles to 1 fps                           │                        │
+│  │  - Performs OCR with Vision (.fast mode)        │                        │
+│  │  - Writes ScreenPayload to App Group            │                        │
+│  │  - Must stay under 50MB memory                  │                        │
+│  └─────────────────────────────────────────────────┘                        │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -257,41 +280,59 @@ TranslateLocal/
 ├── 📁 iOS/                           # Main iOS Application
 │   ├── TranslateLocal/
 │   │   ├── 📁 App/
-│   │   │   ├── TranslateLocalApp.swift
-│   │   │   └── AppDelegate.swift
+│   │   │   └── TranslateLocalApp.swift
 │   │   ├── 📁 Views/
-│   │   │   ├── ContentView.swift
-│   │   │   ├── CameraTranslateView.swift
-│   │   │   ├── ImageTranslateView.swift
-│   │   │   ├── HistoryView.swift
-│   │   │   └── SettingsView.swift
+│   │   │   ├── ContentView.swift         # Main tab navigation
+│   │   │   ├── CameraTranslateView.swift # Live camera translation
+│   │   │   ├── ScreenTranslateView.swift # Screen translation UI with debug panel
+│   │   │   ├── PiPOverlayView.swift      # PiP window content
+│   │   │   ├── ImageTranslateView.swift  # Photo/screenshot translation
+│   │   │   ├── HistoryView.swift         # Translation history
+│   │   │   ├── SettingsView.swift        # App settings
+│   │   │   ├── ModelDownloadView.swift   # Model download UI
+│   │   │   ├── GlossaryView.swift        # Custom glossary terms
+│   │   │   └── TranslateView.swift       # Text input translation
 │   │   ├── 📁 Services/
-│   │   │   ├── OCRService.swift
-│   │   │   ├── TranslationService.swift
-│   │   │   ├── ModelManager.swift
-│   │   │   └── LanguageDetector.swift
+│   │   │   ├── OCRService.swift              # Text recognition (Vision)
+│   │   │   ├── TranslationService.swift      # Translation (Core ML)
+│   │   │   ├── ScreenTranslationService.swift # Screen mode coordinator
+│   │   │   ├── PiPService.swift              # Picture-in-Picture management
+│   │   │   ├── ModelManager.swift            # Model lifecycle management
+│   │   │   ├── CoreMLModelDownloader.swift   # Model download from HuggingFace
+│   │   │   ├── DebugLogger.swift             # Centralized debug logging
+│   │   │   ├── GlossaryService.swift         # Custom term management
+│   │   │   └── AppleTranslationService.swift # Apple Translation fallback
 │   │   ├── 📁 Models/
-│   │   │   ├── TranslationResult.swift
-│   │   │   ├── Language.swift
-│   │   │   └── TranslationHistory.swift
+│   │   │   └── TranslationResult.swift
 │   │   ├── 📁 ViewModels/
 │   │   │   ├── CameraViewModel.swift
 │   │   │   └── TranslationViewModel.swift
+│   │   ├── 📁 Utilities/
+│   │   │   └── CompatibilityHelpers.swift
 │   │   └── 📁 Resources/
-│   │       ├── Assets.xcassets
 │   │       └── Info.plist
+│   ├── 📁 Shared/                    # Shared between app & extensions
+│   │   ├── AppGroupConstants.swift   # App Group configuration & helpers
+│   │   └── ScreenPayload.swift       # Data models for screen translation
+│   ├── 📁 BroadcastExtension/        # Screen capture extension
+│   │   ├── SampleHandler.swift       # OCR from screen recording
+│   │   ├── Info.plist
+│   │   └── BroadcastExtension.entitlements
 │   ├── 📁 ShareExtension/            # Share screenshots/text
 │   │   ├── ShareViewController.swift
-│   │   └── Info.plist
+│   │   ├── Info.plist
+│   │   └── ShareExtension.entitlements
 │   └── 📁 ActionExtension/           # Text selection action
 │       ├── ActionViewController.swift
-│       └── Info.plist
+│       ├── Info.plist
+│       └── ActionExtension.entitlements
 │
 ├── 📁 MLModels/                      # Python model preparation
 │   ├── convert_gemma_to_coreml.py
 │   ├── convert_opus_to_coreml.py
-│   ├── optimize_model.py
+│   ├── bundle_models.sh
 │   ├── test_conversion.py
+│   ├── MODEL_BUNDLING_GUIDE.md
 │   └── requirements.txt
 │
 ├── 📁 Resources/
@@ -300,8 +341,14 @@ TranslateLocal/
 │   └── 📁 Languages/                 # Language configuration
 │       └── supported_languages.json
 │
-├── Package.swift                     # Swift Package dependencies
-├── .gitignore
+├── 📁 TranslateLocal/                # Xcode assets
+│   └── Assets.xcassets/
+│
+├── project.yml                       # XcodeGen configuration
+├── ARCHITECTURE.md                   # Technical architecture docs
+├── GETTING_STARTED.md               # Setup guide
+├── PROJECT_COMPLETION_GUIDE.md      # Completion checklist
+├── XCODE_SETUP_INSTRUCTIONS.md      # Xcode-specific setup
 └── README.md
 ```
 
@@ -383,28 +430,41 @@ coreml_model = ct.convert(
 
 ## 📅 Development Roadmap
 
-### Phase 1: Foundation ✅ (Current)
+### Phase 1: Foundation ✅
 - [x] Project structure
 - [x] OCR Service implementation
 - [x] Basic Translation Service
 - [x] Model conversion scripts
 
-### Phase 2: Core Features 🚧
-- [ ] Camera-based translation view
-- [ ] Share Extension
-- [ ] Action Extension
-- [ ] Settings management
+### Phase 2: Core Features ✅
+- [x] Camera-based translation view
+- [x] Share Extension
+- [x] Action Extension
+- [x] Settings management
 
-### Phase 3: Polish
-- [ ] UI/UX refinement
+### Phase 3: Screen Translation ✅ (Latest)
+- [x] Broadcast Upload Extension for screen capture
+- [x] Picture-in-Picture translation overlay
+- [x] Real-time OCR from any app
+- [x] App Group data sharing between processes
+- [x] Debug logging system
+
+### Phase 4: Model Management ✅
+- [x] Model download UI
+- [x] HuggingFace Opus-MT model support
+- [x] Storage usage tracking
+- [x] Model manager with caching
+
+### Phase 5: Polish & Optimization 🚧
+- [ ] UI/UX refinement for iPad
 - [ ] Performance optimization
-- [ ] Model caching
-- [ ] Translation history
+- [ ] Model quantization (INT8)
+- [ ] Widget Extension
 
-### Phase 4: Advanced Features
-- [ ] Multiple model support
+### Phase 6: Advanced Features (Planned)
 - [ ] Custom fine-tuning
 - [ ] Batch translation
+- [ ] Text-to-speech
 - [ ] Export/import settings
 
 ---

@@ -126,6 +126,7 @@ struct ImageTranslateView: View {
                 }
             }
         }
+        .navigationViewStyle(.stack)  // Fix for iPad navigation issues
     }
     
     // MARK: - View Components

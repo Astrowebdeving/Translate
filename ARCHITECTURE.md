@@ -346,6 +346,160 @@ class CameraViewModel: ObservableObject {
 └─────────────────────────────────────────────────────────┘
 ```
 
+### 📺 Broadcast Upload Extension (Screen Translation)
+
+The Broadcast Extension enables translating text from ANY app by capturing the screen.
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                   Control Center                         │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │  Long-press Record → Select TranslateLocal       │   │
+│  └─────────────────────────────────────────────────┘   │
+└───────────────────────────┬─────────────────────────────┘
+                            │ Screen Recording Stream
+                            ▼
+┌─────────────────────────────────────────────────────────┐
+│              Broadcast Upload Extension                  │
+│          (Separate process, 50MB memory limit)          │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │  SampleHandler.swift                             │   │
+│  │  - Receives CMSampleBuffer at 60fps              │   │
+│  │  - Throttles to 1 frame per second               │   │
+│  │  - Performs OCR using Vision (VNRecognizeText)   │   │
+│  │  - Writes ScreenPayload to App Group container   │   │
+│  └─────────────────────────────────────────────────┘   │
+└───────────────────────────┬─────────────────────────────┘
+                            │ JSON file in App Group
+                            ▼
+┌─────────────────────────────────────────────────────────┐
+│                    Main App (PiP Mode)                   │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │  ScreenTranslationService                        │   │
+│  │  - Watches App Group file for changes            │   │
+│  │  - Reads OCR text from Broadcast Extension       │   │
+│  │  - Runs translation using TranslationService     │   │
+│  │  - Updates PiP display with results              │   │
+│  └─────────────────────────────────────────────────┘   │
+│                          │                              │
+│                          ▼                              │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │  PiPService                                      │   │
+│  │  - Creates AVPictureInPictureController          │   │
+│  │  - Renders SwiftUI view to CMSampleBuffer        │   │
+│  │  - Displays floating translation window          │   │
+│  │  - Persists while user browses other apps        │   │
+│  └─────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────┘
+```
+
+**Key Components:**
+
+| Component | Purpose | Memory Limit |
+|-----------|---------|--------------|
+| **SampleHandler** | Receives screen frames, performs OCR | 50MB (strict) |
+| **ScreenTranslationService** | Coordinates file watching & translation | Main app memory |
+| **PiPService** | Manages Picture-in-Picture display | Main app memory |
+| **PiPOverlayView** | SwiftUI view rendered in PiP window | N/A |
+
+**Data Flow:**
+
+```
+Screen Frame → Throttle (1fps) → OCR → JSON File → Translation → PiP Display
+     ↑                                      ↓
+Broadcast Extension              ←App Group→              Main App
+```
+
+**Critical Constraints:**
+
+1. **Memory Limit**: Broadcast Extension MUST stay under 50MB or iOS kills it silently
+2. **OCR Level**: Use `.fast` instead of `.accurate` to stay within memory
+3. **Latency**: Expect 1-2 second delay due to write-read-translate cycle
+4. **Atomic Writes**: Use atomic file writes to prevent partial reads
+
+---
+
+## 🐞 Debug Logging System
+
+### DebugLogger (`DebugLogger.swift`)
+
+A centralized logging system for troubleshooting across the app:
+
+```swift
+// Categories for filtering logs
+enum Category {
+    case screenTranslation  // Screen translation flow
+    case pip                // Picture-in-Picture
+    case broadcast          // Broadcast Extension
+    case ocr                // Text recognition
+    case translation        // Translation service
+    case model              // Model loading/downloading
+    case appGroup           // App Group communication
+}
+
+// Log levels with emoji indicators
+enum Level {
+    case debug   // 🔍
+    case info    // ℹ️
+    case warning // ⚠️
+    case error   // ❌
+    case success // ✅
+}
+```
+
+**Usage:**
+
+```swift
+// Log to specific category
+DebugLogger.pip("PiP started successfully", level: .success)
+DebugLogger.screenTranslation("Payload received with 5 blocks", level: .info)
+
+// Retrieve logs for display
+let recentLogs = DebugLogger.getRecentLogs(count: 50)
+let pipLogs = DebugLogger.getRecentLogs(category: .pip)
+```
+
+**In-App Debug Panel:**
+
+The ScreenTranslateView includes a debug panel that shows:
+- PiP status and frame count
+- Broadcast state
+- App Group file status
+- Recent activity log
+- Full debug log sheet (tap 🐞 icon)
+
+---
+
+## ⬇️ Model Download System
+
+### ModelDownloadView & CoreMLModelDownloader
+
+The app supports downloading Opus-MT models from HuggingFace:
+
+```
+User Request → ModelDownloadManager → Download from HuggingFace → Extract → Store locally
+                                              │
+                                              ▼
+                                    App Support/TranslateLocal/Models/
+```
+
+**Supported Models:**
+
+| Model ID | Languages | Size |
+|----------|-----------|------|
+| opus-zh-en | Chinese → English | ~180 MB |
+| opus-en-zh | English → Chinese | ~180 MB |
+| opus-ja-en | Japanese → English | ~180 MB |
+| opus-en-ja | English → Japanese | ~180 MB |
+| opus-es-en | Spanish → English | ~150 MB |
+| opus-en-es | English → Spanish | ~150 MB |
+| opus-fr-en | French → English | ~150 MB |
+| opus-en-fr | English → French | ~150 MB |
+| opus-de-en | German → English | ~150 MB |
+| opus-en-de | English → German | ~150 MB |
+
+**Note:** Models need to be pre-converted to CoreML format and hosted. The HuggingFace URLs point to PyTorch weights which require conversion. See `MLModels/` for conversion scripts.
+
 ---
 
 ## 🔐 Privacy & Security
@@ -425,17 +579,59 @@ class CameraViewModel: ObservableObject {
 ### Scalability Path
 
 ```
-Current: Single translation model
+Current: Opus-MT single-pair models
     │
     ▼
-Phase 2: Multiple specialized models
+Phase 2: Gemma-3n multilingual model
     │
     ▼
-Phase 3: Model routing based on content
+Phase 3: Model routing based on language pair
     │
     ▼
 Phase 4: User-trainable custom models
 ```
+
+---
+
+## 📱 iPad-Specific Considerations
+
+### Navigation Stability
+
+To prevent glitchy transitions on iPad, all main views use:
+
+```swift
+NavigationView {
+    // content
+}
+.navigationViewStyle(.stack)  // Forces single-column layout
+```
+
+### Screen Translation on iPad
+
+- PiP works on iPad but requires a real device (not simulator)
+- Broadcast picker may show differently on iPad
+- Simulator has limited screen recording capabilities
+
+---
+
+## 🔧 App Group Configuration
+
+All targets share data via App Groups:
+
+```
+App Group: group.com.translatelocal.shared
+    │
+    ├── screen_payload.json       ← Written by Broadcast Extension
+    ├── translation_result.json   ← Written by Main App
+    ├── shared_settings.json      ← Shared preferences
+    └── broadcast_status.json     ← Broadcast state
+```
+
+**Targets using App Group:**
+- TranslateLocal (main app)
+- BroadcastExtension
+- ShareExtension
+- ActionExtension
 
 ---
 
@@ -444,3 +640,4 @@ This architecture is designed to be:
 - **Testable**: Services can be mocked
 - **Scalable**: Add new features without major rewrites
 - **Private**: No network dependencies
+- **Debuggable**: Comprehensive logging throughout

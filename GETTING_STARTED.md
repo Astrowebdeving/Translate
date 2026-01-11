@@ -48,9 +48,11 @@ xcode-select --install
 TranslateLocal is an iOS app that:
 
 1. **📷 Camera Translation** - Point your iPhone camera at any text (signs, menus, books) and see translations overlaid in real-time
-2. **🖼️ Image Translation** - Select photos or screenshots to translate all text within them
-3. **📤 Share Extension** - Share images from Safari, Photos, or any app to translate
-4. **✂️ Action Extension** - Select text in Safari and translate with one tap
+2. **📺 Screen Translation** - Translate text from ANY app using iOS Screen Recording and a floating PiP window
+3. **🖼️ Image Translation** - Select photos or screenshots to translate all text within them
+4. **📤 Share Extension** - Share images from Safari, Photos, or any app to translate
+5. **✂️ Action Extension** - Select text in Safari and translate with one tap
+6. **⬇️ Model Downloads** - Download Opus-MT models from HuggingFace for offline translation
 
 ### How It Works (Technical Overview)
 
@@ -104,12 +106,19 @@ TranslateLocal/
 │   │   ├── Services/                       # 🔧 Core Business Logic
 │   │   │   ├── OCRService.swift            # Text recognition using Vision
 │   │   │   ├── TranslationService.swift    # Translation using Core ML models
-│   │   │   └── ModelManager.swift          # Loads/unloads ML models
+│   │   │   ├── ModelManager.swift          # Loads/unloads ML models
+│   │   │   ├── ScreenTranslationService.swift # Screen translation coordinator
+│   │   │   ├── PiPService.swift            # Picture-in-Picture management
+│   │   │   ├── CoreMLModelDownloader.swift # Download models from HuggingFace
+│   │   │   └── DebugLogger.swift           # Centralized debug logging
 │   │   │
 │   │   ├── Views/                          # 🎨 UI Screens
 │   │   │   ├── ContentView.swift           # Main tab navigation
 │   │   │   ├── CameraTranslateView.swift   # Live camera translation
+│   │   │   ├── ScreenTranslateView.swift   # Screen translation with debug UI
+│   │   │   ├── PiPOverlayView.swift        # PiP window content
 │   │   │   ├── ImageTranslateView.swift    # Photo/screenshot translation
+│   │   │   ├── ModelDownloadView.swift     # Download Opus-MT models
 │   │   │   ├── HistoryView.swift           # Past translations
 │   │   │   └── SettingsView.swift          # App configuration
 │   │   │
@@ -122,6 +131,15 @@ TranslateLocal/
 │   │   │
 │   │   └── Resources/
 │   │       └── Info.plist                  # App permissions & config
+│   │
+│   ├── Shared/                             # 🔗 Shared between app & extensions
+│   │   ├── AppGroupConstants.swift         # App Group configuration
+│   │   └── ScreenPayload.swift             # Screen translation data models
+│   │
+│   ├── BroadcastExtension/                 # 📺 Screen Recording Extension
+│   │   ├── SampleHandler.swift             # OCR from screen recording
+│   │   ├── Info.plist
+│   │   └── BroadcastExtension.entitlements
 │   │
 │   ├── ShareExtension/                     # 📤 iOS Share Sheet Extension
 │   │   ├── ShareViewController.swift       # Handles shared images
@@ -203,10 +221,21 @@ TranslateLocal/
 3. Go to **Signing & Capabilities** tab
 4. Click **+ Capability** and add:
    - **App Groups** → Add `group.com.translatelocal.shared`
+   - **Background Modes** → Check "Audio, AirPlay, and Picture in Picture"
    - **Background Modes** → Check "Background processing"
 
-5. Repeat for ShareExtension and ActionExtension targets:
+5. Repeat for all extension targets (ShareExtension, ActionExtension, BroadcastExtension):
    - Add same **App Groups** identifier
+
+#### Step 4.5: Add Broadcast Upload Extension (for Screen Translation)
+
+1. **File → New → Target**
+2. Select **iOS → Broadcast Upload Extension**
+3. Name: `BroadcastExtension`
+4. Click **Finish**
+5. When prompted "Activate scheme?", click **Activate**
+6. Replace generated files with our `BroadcastExtension/` files
+7. Add **App Groups** capability with `group.com.translatelocal.shared`
 
 #### Step 5: Update Info.plist
 
@@ -356,11 +385,44 @@ Project → Target → General → Minimum Deployments → iOS 17.0
 2. Check App Groups are configured identically for all targets
 3. Restart your iPhone after installing
 
+#### ❌ Screen translation PiP doesn't appear
+
+**Solutions**:
+1. Test on a **real device** - simulator has limited PiP support
+2. Check Background Modes capability includes "Audio, AirPlay, and Picture in Picture"
+3. Make sure no other PiP window is active
+4. Check debug logs for errors (tap 🐞 icon)
+
+#### ❌ Broadcast Extension not in screen recording list
+
+**Solutions**:
+1. Ensure BroadcastExtension target is built and included
+2. Check the `preferredExtension` bundle ID in `ScreenTranslateView.swift` matches your extension
+3. Restart device after first install
+4. Verify BroadcastExtension has proper `NSExtensionPointIdentifier` in Info.plist
+
+#### ❌ Screen translation shows "File doesn't exist"
+
+**Solutions**:
+1. Start the screen recording from Control Center
+2. Make sure you selected "TranslateLocal Screen" (not just screen record)
+3. Check App Group container is accessible (see debug logs)
+4. Verify both main app and extension have same App Group ID
+
+#### ❌ iPad navigation is glitchy
+
+**Solutions**:
+1. Views should use `.navigationViewStyle(.stack)` modifier
+2. Check for proper NavigationView/NavigationStack usage
+3. Avoid nested NavigationViews
+
 ### Getting Help
 
 - Check Apple's [Core ML Documentation](https://developer.apple.com/documentation/coreml)
 - Vision Framework: [Text Recognition Guide](https://developer.apple.com/documentation/vision/recognizing_text_in_images)
 - SwiftUI: [Apple Tutorials](https://developer.apple.com/tutorials/swiftui)
+- ReplayKit: [Broadcast Extension Guide](https://developer.apple.com/documentation/replaykit/broadcast_upload_extension)
+- Picture-in-Picture: [AVKit PiP Guide](https://developer.apple.com/documentation/avkit/adopting_picture_in_picture_in_a_standard_player)
 
 ---
 
@@ -368,6 +430,7 @@ Project → Target → General → Minimum Deployments → iOS 17.0
 
 Before releasing, test these features:
 
+### Core Features
 - [ ] Camera translation works in good lighting
 - [ ] Camera translation works in low light (flash)
 - [ ] Image picker loads photos correctly
@@ -378,16 +441,68 @@ Before releasing, test these features:
 - [ ] App works offline (airplane mode)
 - [ ] Settings persist after restart
 
+### Screen Translation (requires real device)
+- [ ] Screen Translation tab appears in app
+- [ ] "Start Screen Translation" button works
+- [ ] PiP window appears after starting
+- [ ] Broadcast picker shows TranslateLocal option
+- [ ] Debug panel shows status updates
+- [ ] Debug log sheet opens (tap 🐞 icon)
+- [ ] Screen translation works with Safari
+- [ ] PiP persists when switching apps
+
+### Model Downloads
+- [ ] Model download view accessible from Settings
+- [ ] Available models list displays correctly
+- [ ] Download progress shows
+- [ ] Downloaded models appear in "Downloaded" section
+- [ ] Delete model works
+
+---
+
+## 🐞 Debugging Screen Translation
+
+If screen translation isn't working, use the built-in debug tools:
+
+### View Debug Panel
+1. Go to Screen Translation tab
+2. Tap "Start Screen Translation"
+3. Observe the debug section showing:
+   - PiP Status
+   - Broadcast state
+   - File existence in App Group
+   - Recent activity log
+
+### View Full Debug Logs
+1. While screen translation is active, tap the 🐞 bug icon in the top-left
+2. This opens the Debug Log Sheet showing:
+   - All recent log entries by category
+   - App Group container info
+   - Service-specific debug logs
+
+### Common Issues
+- **"PiP not possible"**: Try again, ensure no other PiP is active
+- **"File doesn't exist"**: Broadcast Extension hasn't started recording
+- **Simulator limitations**: Screen recording doesn't work on simulator
+
 ---
 
 ## 🎉 You're Ready!
 
 Once you've completed these steps, you'll have a fully functional on-device translation app. 
 
+**Features available:**
+1. ✅ Camera-based real-time translation
+2. ✅ Image/screenshot translation
+3. ✅ Screen translation with PiP (real device only)
+4. ✅ Share & Action extensions
+5. ✅ Model download from HuggingFace
+6. ✅ Built-in debug logging
+
 **Next steps to enhance your app:**
-1. Add more language pairs
-2. Customize the UI theme
-3. Add text-to-speech for translations
-4. Implement batch translation for documents
+1. Convert and host CoreML models for real translation
+2. Add more language pairs
+3. Customize the UI theme
+4. Add text-to-speech for translations
 
 Happy coding! 🚀

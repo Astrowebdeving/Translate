@@ -30,6 +30,20 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
+               BlueprintIdentifier = "0803223909395B5197789B31"
+               BuildableName = "BroadcastExtension.appex"
+               BlueprintName = "BroadcastExtension"
+               ReferencedContainer = "container:TranslateLocal.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "YES"
+            buildForProfiling = "YES"
+            buildForArchiving = "YES"
+            buildForAnalyzing = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
                BlueprintIdentifier = "666E371BC839C46E1CE555E7"
                BuildableName = "ShareExtension.appex"
                BlueprintName = "ShareExtension"
