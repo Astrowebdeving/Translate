@@ -8,13 +8,14 @@
 import SwiftUI
 
 struct SettingsView: View {
-    @EnvironmentObject var appState: AppState
-    @EnvironmentObject var modelManager: ModelManager
+    @Environment(AppState.self) var appState
     
     @State private var showingModelManager = false
     @State private var showingAbout = false
     
     var body: some View {
+        @Bindable var state = appState
+        
         NavigationView {
             List {
                 // Language Settings
@@ -33,7 +34,7 @@ struct SettingsView: View {
                         }
                     }
                     
-                    Toggle(isOn: $appState.autoDetectLanguage) {
+                    Toggle(isOn: $state.autoDetectLanguage) {
                         HStack {
                             SettingsIcon(icon: "wand.and.stars", color: .purple)
                             Text("Auto-detect Language")
@@ -55,7 +56,7 @@ struct SettingsView: View {
                             SettingsIcon(icon: "cpu", color: .green)
                             VStack(alignment: .leading) {
                                 Text("AI Models")
-                                Text("\(modelManager.loadedModels.count) loaded")
+                                Text("\(appState.modelManager.loadedModels.count) loaded")
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }
@@ -69,7 +70,7 @@ struct SettingsView: View {
                 
                 // App Behavior
                 Section {
-                    Toggle(isOn: $appState.continuousTranslation) {
+                    Toggle(isOn: $state.continuousTranslation) {
                         HStack {
                             SettingsIcon(icon: "repeat", color: .orange)
                             Text("Continuous Translation")
@@ -79,7 +80,7 @@ struct SettingsView: View {
                         appState.saveSettings()
                     }
                     
-                    Toggle(isOn: $appState.hapticFeedback) {
+                    Toggle(isOn: $state.hapticFeedback) {
                         HStack {
                             SettingsIcon(icon: "iphone.radiowaves.left.and.right", color: .pink)
                             Text("Haptic Feedback")
@@ -159,14 +160,16 @@ struct SettingsIcon: View {
 // MARK: - Language Settings View
 
 struct LanguageSettingsView: View {
-    @EnvironmentObject var appState: AppState
+    @Environment(AppState.self) var appState
     
     var body: some View {
+        @Bindable var state = appState
+        
         List {
             Section {
                 ForEach(Language.allLanguages) { language in
                     Button {
-                        appState.sourceLanguage = language
+                        state.sourceLanguage = language
                         appState.saveSettings()
                     } label: {
                         HStack {
@@ -189,7 +192,7 @@ struct LanguageSettingsView: View {
             Section {
                 ForEach(Language.allLanguages) { language in
                     Button {
-                        appState.targetLanguage = language
+                        state.targetLanguage = language
                         appState.saveSettings()
                     } label: {
                         HStack {
@@ -226,7 +229,7 @@ struct LanguageSettingsView: View {
 // MARK: - Model Management View
 
 struct ModelManagementView: View {
-    @EnvironmentObject var modelManager: ModelManager
+    @Environment(AppState.self) var appState
     
     var body: some View {
         List {
@@ -244,19 +247,19 @@ struct ModelManagementView: View {
                 HStack {
                     Text("Memory Usage")
                     Spacer()
-                    Text(formatBytes(modelManager.getMemoryUsage()))
+                    Text(formatBytes(appState.modelManager.getMemoryUsage()))
                         .foregroundColor(.secondary)
                 }
                 
                 Button {
-                    modelManager.unloadAllModels()
+                    appState.modelManager.unloadAllModels()
                 } label: {
                     HStack {
                         Image(systemName: "memorychip")
                         Text("Free Memory")
                     }
                 }
-                .disabled(modelManager.loadedModels.isEmpty)
+                .disabled(appState.modelManager.loadedModels.isEmpty)
             } header: {
                 Text("Memory")
             }
@@ -274,7 +277,7 @@ struct ModelManagementView: View {
 
 struct ModelRow: View {
     let type: TranslationModelType
-    @EnvironmentObject var modelManager: ModelManager
+    @Environment(AppState.self) var appState
     @State private var isLoading = false
     
     var body: some View {
@@ -283,7 +286,7 @@ struct ModelRow: View {
                 Text(type.displayName)
                     .font(.body)
                 
-                if let info = modelManager.availableModels[type] {
+                if let info = appState.modelManager.availableModels[type] {
                     HStack {
                         Text(info.sizeFormatted)
                         if info.isBundled {
@@ -301,11 +304,11 @@ struct ModelRow: View {
             
             Spacer()
             
-            if modelManager.isModelLoaded(type) {
+            if appState.modelManager.isModelLoaded(type) {
                 Label("Loaded", systemImage: "checkmark.circle.fill")
                     .font(.caption)
                     .foregroundColor(.green)
-            } else if modelManager.isModelAvailable(type) {
+            } else if appState.modelManager.isModelAvailable(type) {
                 Button {
                     loadModel()
                 } label: {
@@ -332,7 +335,7 @@ struct ModelRow: View {
         isLoading = true
         Task {
             do {
-                _ = try await modelManager.loadModel(type)
+                _ = try await appState.modelManager.loadModel(type)
             } catch {
                 print("Failed to load model: \(error)")
             }
@@ -504,6 +507,5 @@ struct PolicySection: View {
 
 #Preview {
     SettingsView()
-        .environmentObject(AppState())
-        .environmentObject(ModelManager.shared)
+        .environment(AppState())
 }

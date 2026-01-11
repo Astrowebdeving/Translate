@@ -54,29 +54,131 @@ struct Language: Identifiable, Hashable, Codable {
 
 /// Translation model types
 enum TranslationModelType: String, CaseIterable {
+    // Multilingual model (fallback)
     case gemma3n = "Gemma3nE2B"
+    
+    // ===== MAJOR MODELS: English ↔ Asian Languages =====
     case opusEnJa = "OpusMT_en_ja"
+    case opusJaEn = "OpusMT_ja_en"
     case opusEnZh = "OpusMT_en_zh"
-    case opusEnEs = "OpusMT_en_es"
-    case opusEnFr = "OpusMT_en_fr"
-    case opusEnDe = "OpusMT_en_de"
+    case opusZhEn = "OpusMT_zh_en"
     case opusEnKo = "OpusMT_en_ko"
+    case opusKoEn = "OpusMT_ko_en"
+    
+    // ===== MAJOR MODELS: English ↔ European Languages =====
+    case opusEnEs = "OpusMT_en_es"
+    case opusEsEn = "OpusMT_es_en"
+    case opusEnFr = "OpusMT_en_fr"
+    case opusFrEn = "OpusMT_fr_en"
+    case opusEnDe = "OpusMT_en_de"
+    case opusDeEn = "OpusMT_de_en"
+    case opusEnIt = "OpusMT_en_it"
+    case opusItEn = "OpusMT_it_en"
+    case opusEnPt = "OpusMT_en_pt"
+    case opusPtEn = "OpusMT_pt_en"
+    case opusEnRu = "OpusMT_en_ru"
+    case opusRuEn = "OpusMT_ru_en"
+    
+    // ===== ADDITIONAL MODELS: Other Language Pairs =====
+    case opusEnAr = "OpusMT_en_ar"
+    case opusArEn = "OpusMT_ar_en"
+    case opusEnNl = "OpusMT_en_nl"
+    case opusNlEn = "OpusMT_nl_en"
+    case opusEnPl = "OpusMT_en_pl"
+    case opusPlEn = "OpusMT_pl_en"
+    case opusEnTr = "OpusMT_en_tr"
+    case opusTrEn = "OpusMT_tr_en"
+    case opusEnVi = "OpusMT_en_vi"
+    case opusViEn = "OpusMT_vi_en"
+    case opusEnTh = "OpusMT_en_th"
+    case opusThEn = "OpusMT_th_en"
+    case opusEnHi = "OpusMT_en_hi"
+    case opusHiEn = "OpusMT_hi_en"
+    
+    // ===== NON-ENGLISH PAIRS (Popular) =====
+    case opusZhJa = "OpusMT_zh_ja"
+    case opusJaZh = "OpusMT_ja_zh"
+    case opusFrDe = "OpusMT_fr_de"
+    case opusDeFr = "OpusMT_de_fr"
+    case opusEsFr = "OpusMT_es_fr"
+    case opusFrEs = "OpusMT_fr_es"
     
     var displayName: String {
         switch self {
         case .gemma3n: return "Gemma 3n (Multilingual)"
-        case .opusEnJa: return "Opus EN→JA"
-        case .opusEnZh: return "Opus EN→ZH"
-        case .opusEnEs: return "Opus EN→ES"
-        case .opusEnFr: return "Opus EN→FR"
-        case .opusEnDe: return "Opus EN→DE"
-        case .opusEnKo: return "Opus EN→KO"
+        // Asian
+        case .opusEnJa: return "English → Japanese"
+        case .opusJaEn: return "Japanese → English"
+        case .opusEnZh: return "English → Chinese"
+        case .opusZhEn: return "Chinese → English"
+        case .opusEnKo: return "English → Korean"
+        case .opusKoEn: return "Korean → English"
+        // European
+        case .opusEnEs: return "English → Spanish"
+        case .opusEsEn: return "Spanish → English"
+        case .opusEnFr: return "English → French"
+        case .opusFrEn: return "French → English"
+        case .opusEnDe: return "English → German"
+        case .opusDeEn: return "German → English"
+        case .opusEnIt: return "English → Italian"
+        case .opusItEn: return "Italian → English"
+        case .opusEnPt: return "English → Portuguese"
+        case .opusPtEn: return "Portuguese → English"
+        case .opusEnRu: return "English → Russian"
+        case .opusRuEn: return "Russian → English"
+        // Additional
+        case .opusEnAr: return "English → Arabic"
+        case .opusArEn: return "Arabic → English"
+        case .opusEnNl: return "English → Dutch"
+        case .opusNlEn: return "Dutch → English"
+        case .opusEnPl: return "English → Polish"
+        case .opusPlEn: return "Polish → English"
+        case .opusEnTr: return "English → Turkish"
+        case .opusTrEn: return "Turkish → English"
+        case .opusEnVi: return "English → Vietnamese"
+        case .opusViEn: return "Vietnamese → English"
+        case .opusEnTh: return "English → Thai"
+        case .opusThEn: return "Thai → English"
+        case .opusEnHi: return "English → Hindi"
+        case .opusHiEn: return "Hindi → English"
+        // Non-English pairs
+        case .opusZhJa: return "Chinese → Japanese"
+        case .opusJaZh: return "Japanese → Chinese"
+        case .opusFrDe: return "French → German"
+        case .opusDeFr: return "German → French"
+        case .opusEsFr: return "Spanish → French"
+        case .opusFrEs: return "French → Spanish"
         }
     }
     
     var sourceLanguage: Language? {
         switch self {
-        case .gemma3n: return nil  // Multilingual
+        case .gemma3n: return nil
+        // To English
+        case .opusJaEn: return .japanese
+        case .opusZhEn: return .chinese
+        case .opusKoEn: return .korean
+        case .opusEsEn: return .spanish
+        case .opusFrEn: return .french
+        case .opusDeEn: return .german
+        case .opusItEn: return Language(id: "it", name: "Italian", nativeName: "Italiano", isSupported: true)
+        case .opusPtEn: return .portuguese
+        case .opusRuEn: return .russian
+        case .opusArEn: return .arabic
+        case .opusNlEn: return Language(id: "nl", name: "Dutch", nativeName: "Nederlands", isSupported: true)
+        case .opusPlEn: return Language(id: "pl", name: "Polish", nativeName: "Polski", isSupported: true)
+        case .opusTrEn: return Language(id: "tr", name: "Turkish", nativeName: "Türkçe", isSupported: true)
+        case .opusViEn: return Language(id: "vi", name: "Vietnamese", nativeName: "Tiếng Việt", isSupported: true)
+        case .opusThEn: return Language(id: "th", name: "Thai", nativeName: "ไทย", isSupported: true)
+        case .opusHiEn: return Language(id: "hi", name: "Hindi", nativeName: "हिन्दी", isSupported: true)
+        // Non-English pairs
+        case .opusZhJa: return .chinese
+        case .opusJaZh: return .japanese
+        case .opusFrDe: return .french
+        case .opusDeFr: return .german
+        case .opusEsFr: return .spanish
+        case .opusFrEs: return .french
+        // From English (default)
         default: return .english
         }
     }
@@ -84,14 +186,112 @@ enum TranslationModelType: String, CaseIterable {
     var targetLanguage: Language? {
         switch self {
         case .gemma3n: return nil
+        // From English
         case .opusEnJa: return .japanese
         case .opusEnZh: return .chinese
+        case .opusEnKo: return .korean
         case .opusEnEs: return .spanish
         case .opusEnFr: return .french
         case .opusEnDe: return .german
-        case .opusEnKo: return .korean
+        case .opusEnIt: return Language(id: "it", name: "Italian", nativeName: "Italiano", isSupported: true)
+        case .opusEnPt: return .portuguese
+        case .opusEnRu: return .russian
+        case .opusEnAr: return .arabic
+        case .opusEnNl: return Language(id: "nl", name: "Dutch", nativeName: "Nederlands", isSupported: true)
+        case .opusEnPl: return Language(id: "pl", name: "Polish", nativeName: "Polski", isSupported: true)
+        case .opusEnTr: return Language(id: "tr", name: "Turkish", nativeName: "Türkçe", isSupported: true)
+        case .opusEnVi: return Language(id: "vi", name: "Vietnamese", nativeName: "Tiếng Việt", isSupported: true)
+        case .opusEnTh: return Language(id: "th", name: "Thai", nativeName: "ไทย", isSupported: true)
+        case .opusEnHi: return Language(id: "hi", name: "Hindi", nativeName: "हिन्दी", isSupported: true)
+        // Non-English pairs
+        case .opusZhJa: return .japanese
+        case .opusJaZh: return .chinese
+        case .opusFrDe: return .german
+        case .opusDeFr: return .french
+        case .opusEsFr: return .french
+        case .opusFrEs: return .spanish
+        // To English (default)
+        default: return .english
         }
     }
+    
+    /// Category for grouping in UI
+    var category: ModelCategory {
+        switch self {
+        case .gemma3n:
+            return .multilingual
+        case .opusEnJa, .opusJaEn, .opusEnZh, .opusZhEn, .opusEnKo, .opusKoEn:
+            return .majorAsian
+        case .opusEnEs, .opusEsEn, .opusEnFr, .opusFrEn, .opusEnDe, .opusDeEn:
+            return .majorEuropean
+        case .opusZhJa, .opusJaZh, .opusFrDe, .opusDeFr, .opusEsFr, .opusFrEs:
+            return .nonEnglish
+        default:
+            return .additional
+        }
+    }
+    
+    /// Estimated model size in MB
+    var estimatedSizeMB: Int {
+        switch self {
+        case .gemma3n: return 800  // Larger multilingual model
+        default: return 150  // Opus MT models are ~150MB each
+        }
+    }
+    
+    /// HuggingFace model identifier for download
+    var huggingFaceId: String {
+        switch self {
+        case .gemma3n: return "google/gemma-3n-E2B"
+        case .opusEnJa: return "Helsinki-NLP/opus-mt-en-ja"
+        case .opusJaEn: return "Helsinki-NLP/opus-mt-ja-en"
+        case .opusEnZh: return "Helsinki-NLP/opus-mt-en-zh"
+        case .opusZhEn: return "Helsinki-NLP/opus-mt-zh-en"
+        case .opusEnKo: return "Helsinki-NLP/opus-mt-en-ko"
+        case .opusKoEn: return "Helsinki-NLP/opus-mt-ko-en"
+        case .opusEnEs: return "Helsinki-NLP/opus-mt-en-es"
+        case .opusEsEn: return "Helsinki-NLP/opus-mt-es-en"
+        case .opusEnFr: return "Helsinki-NLP/opus-mt-en-fr"
+        case .opusFrEn: return "Helsinki-NLP/opus-mt-fr-en"
+        case .opusEnDe: return "Helsinki-NLP/opus-mt-en-de"
+        case .opusDeEn: return "Helsinki-NLP/opus-mt-de-en"
+        case .opusEnIt: return "Helsinki-NLP/opus-mt-en-it"
+        case .opusItEn: return "Helsinki-NLP/opus-mt-it-en"
+        case .opusEnPt: return "Helsinki-NLP/opus-mt-en-pt"
+        case .opusPtEn: return "Helsinki-NLP/opus-mt-pt-en"
+        case .opusEnRu: return "Helsinki-NLP/opus-mt-en-ru"
+        case .opusRuEn: return "Helsinki-NLP/opus-mt-ru-en"
+        case .opusEnAr: return "Helsinki-NLP/opus-mt-en-ar"
+        case .opusArEn: return "Helsinki-NLP/opus-mt-ar-en"
+        case .opusEnNl: return "Helsinki-NLP/opus-mt-en-nl"
+        case .opusNlEn: return "Helsinki-NLP/opus-mt-nl-en"
+        case .opusEnPl: return "Helsinki-NLP/opus-mt-en-pl"
+        case .opusPlEn: return "Helsinki-NLP/opus-mt-pl-en"
+        case .opusEnTr: return "Helsinki-NLP/opus-mt-en-tr"
+        case .opusTrEn: return "Helsinki-NLP/opus-mt-tr-en"
+        case .opusEnVi: return "Helsinki-NLP/opus-mt-en-vi"
+        case .opusViEn: return "Helsinki-NLP/opus-mt-vi-en"
+        case .opusEnTh: return "Helsinki-NLP/opus-mt-en-th"
+        case .opusThEn: return "Helsinki-NLP/opus-mt-th-en"
+        case .opusEnHi: return "Helsinki-NLP/opus-mt-en-hi"
+        case .opusHiEn: return "Helsinki-NLP/opus-mt-hi-en"
+        case .opusZhJa: return "Helsinki-NLP/opus-mt-zh-ja"
+        case .opusJaZh: return "Helsinki-NLP/opus-mt-ja-zh"
+        case .opusFrDe: return "Helsinki-NLP/opus-mt-fr-de"
+        case .opusDeFr: return "Helsinki-NLP/opus-mt-de-fr"
+        case .opusEsFr: return "Helsinki-NLP/opus-mt-es-fr"
+        case .opusFrEs: return "Helsinki-NLP/opus-mt-fr-es"
+        }
+    }
+}
+
+/// Model categories for grouping
+enum ModelCategory: String, CaseIterable {
+    case multilingual = "Multilingual (Any Language)"
+    case majorAsian = "Asian Languages"
+    case majorEuropean = "European Languages"
+    case additional = "Additional Languages"
+    case nonEnglish = "Non-English Pairs"
 }
 
 // MARK: - Translation Configuration
@@ -110,15 +310,37 @@ struct TranslationConfiguration {
 // MARK: - Translation Service
 
 /// Main translation service using on-device ML models
-@MainActor
-class TranslationService: ObservableObject {
+@MainActor @Observable
+class TranslationService {
+
+    // MARK: - Timeout Helper
+
+    private func withTimeout<T>(_ seconds: TimeInterval, operation: @escaping () async throws -> T) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            // Add the main operation
+            group.addTask {
+                try await operation()
+            }
+
+            // Add timeout task
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                throw TranslationError.translationTimeout
+            }
+
+            // Wait for first completion
+            let result = try await group.next()!
+            group.cancelAll()  // Cancel remaining tasks
+            return result
+        }
+    }
     
-    // MARK: - Published Properties
+    // MARK: - Observable Properties
     
-    @Published private(set) var isProcessing = false
-    @Published private(set) var loadedModels: Set<TranslationModelType> = []
-    @Published private(set) var error: TranslationError?
-    @Published var configuration = TranslationConfiguration.default
+    private(set) var isProcessing = false
+    private(set) var loadedModels: Set<TranslationModelType> = []
+    private(set) var error: TranslationError?
+    var configuration = TranslationConfiguration.default
     
     // MARK: - Private Properties
     
@@ -180,9 +402,9 @@ class TranslationService: ObservableObject {
             // Select best model for this language pair
             let modelType = selectModel(from: sourceLanguage, to: targetLanguage)
             
-            // Ensure model is loaded
-            if !loadedModels.contains(modelType) {
-                try await loadModel(modelType)
+            // Try to load model if available (but don't fail if not - demo mode will handle it)
+            if !loadedModels.contains(modelType) && modelManager.isModelAvailable(modelType) {
+                try? await loadModel(modelType)
             }
             
             // Perform translation
@@ -229,20 +451,63 @@ class TranslationService: ObservableObject {
     // MARK: - Private Methods
     
     private func selectModel(from source: Language, to target: Language) -> TranslationModelType {
-        // First, check if we have a specialized Opus model for this pair
-        if source == .english {
+        // Check for specialized Opus model for this language pair
+        
+        // From English
+        if source.id == "en" {
             switch target.id {
             case "ja": return .opusEnJa
             case "zh": return .opusEnZh
+            case "ko": return .opusEnKo
             case "es": return .opusEnEs
             case "fr": return .opusEnFr
             case "de": return .opusEnDe
-            case "ko": return .opusEnKo
+            case "it": return .opusEnIt
+            case "pt": return .opusEnPt
+            case "ru": return .opusEnRu
+            case "ar": return .opusEnAr
+            case "nl": return .opusEnNl
+            case "pl": return .opusEnPl
+            case "tr": return .opusEnTr
+            case "vi": return .opusEnVi
+            case "th": return .opusEnTh
+            case "hi": return .opusEnHi
             default: break
             }
         }
         
-        // Fall back to Gemma for other pairs
+        // To English
+        if target.id == "en" {
+            switch source.id {
+            case "ja": return .opusJaEn
+            case "zh": return .opusZhEn
+            case "ko": return .opusKoEn
+            case "es": return .opusEsEn
+            case "fr": return .opusFrEn
+            case "de": return .opusDeEn
+            case "it": return .opusItEn
+            case "pt": return .opusPtEn
+            case "ru": return .opusRuEn
+            case "ar": return .opusArEn
+            case "nl": return .opusNlEn
+            case "pl": return .opusPlEn
+            case "tr": return .opusTrEn
+            case "vi": return .opusViEn
+            case "th": return .opusThEn
+            case "hi": return .opusHiEn
+            default: break
+            }
+        }
+        
+        // Non-English pairs
+        if source.id == "zh" && target.id == "ja" { return .opusZhJa }
+        if source.id == "ja" && target.id == "zh" { return .opusJaZh }
+        if source.id == "fr" && target.id == "de" { return .opusFrDe }
+        if source.id == "de" && target.id == "fr" { return .opusDeFr }
+        if source.id == "es" && target.id == "fr" { return .opusEsFr }
+        if source.id == "fr" && target.id == "es" { return .opusFrEs }
+        
+        // Fall back to Gemma for unsupported pairs
         return .gemma3n
     }
     
@@ -253,8 +518,10 @@ class TranslationService: ObservableObject {
         using modelType: TranslationModelType
     ) async throws -> String {
         
+        // Check if model is loaded - if not, use demo translation
         guard let model = models[modelType] else {
-            throw TranslationError.modelNotLoaded(modelType.displayName)
+            // Provide demo translation when no models are available
+            return try demoTranslation(text: text, from: sourceLanguage, to: targetLanguage)
         }
         
         // This is a placeholder for actual model inference
@@ -263,20 +530,24 @@ class TranslationService: ObservableObject {
         // 2. Create MLMultiArray input
         // 3. Run model prediction
         // 4. Decode output tokens
-        
-        return try await withCheckedThrowingContinuation { continuation in
-            processingQueue.async {
-                do {
-                    let result = try self.runModelInference(
-                        model: model,
-                        text: text,
-                        sourceLanguage: sourceLanguage,
-                        targetLanguage: targetLanguage,
-                        modelType: modelType
-                    )
-                    continuation.resume(returning: result)
-                } catch {
-                    continuation.resume(throwing: error)
+
+        let config = self.configuration
+        return try await withTimeout(10.0) {  // 10 second timeout for translation
+            try await withCheckedThrowingContinuation { continuation in
+                self.processingQueue.async {
+                    do {
+                        let result = try self.runModelInference(
+                            model: model,
+                            text: text,
+                            sourceLanguage: sourceLanguage,
+                            targetLanguage: targetLanguage,
+                            modelType: modelType,
+                            configuration: config
+                        )
+                        continuation.resume(returning: result)
+                    } catch {
+                        continuation.resume(throwing: error)
+                    }
                 }
             }
         }
@@ -287,22 +558,24 @@ class TranslationService: ObservableObject {
         text: String,
         sourceLanguage: Language,
         targetLanguage: Language,
-        modelType: TranslationModelType
+        modelType: TranslationModelType,
+        configuration: TranslationConfiguration
     ) throws -> String {
         
         // For Gemma-style models, we construct a prompt
         if modelType == .gemma3n {
-            return try runGemmaInference(model: model, text: text, targetLanguage: targetLanguage)
+            return try runGemmaInference(model: model, text: text, targetLanguage: targetLanguage, configuration: configuration)
         }
         
         // For Opus-MT encoder-decoder models
-        return try runOpusInference(model: model, text: text)
+        return try runOpusInference(model: model, text: text, configuration: configuration)
     }
     
     private func runGemmaInference(
         model: MLModel,
         text: String,
-        targetLanguage: Language
+        targetLanguage: Language,
+        configuration: TranslationConfiguration
     ) throws -> String {
         // Construct translation prompt
         let prompt = "Translate to \(targetLanguage.name): \(text)"
@@ -344,7 +617,8 @@ class TranslationService: ObservableObject {
     
     private func runOpusInference(
         model: MLModel,
-        text: String
+        text: String,
+        configuration: TranslationConfiguration
     ) throws -> String {
         // Tokenize
         let tokens = tokenize(text)
@@ -439,6 +713,13 @@ class TranslationService: ObservableObject {
         return outputTokens
     }
     
+    // MARK: - Demo Translation (Fallback when no models available)
+
+    /// Provides basic demo message when no models are available
+    private func demoTranslation(text: String, from source: Language, to target: Language) throws -> String {
+        return "[Demo Mode] No AI models installed. Download models from the Translate tab to enable real translation.\n\nOriginal: \(text)"
+    }
+    
     // MARK: - Language Detection
     
     private func detectLanguage(_ text: String) -> Language {
@@ -482,9 +763,10 @@ enum TranslationError: LocalizedError {
     case modelNotLoaded(String)
     case modelLoadFailed(String)
     case translationFailed(String)
+    case translationTimeout
     case unsupportedLanguagePair
     case invalidModelOutput
-    
+
     var errorDescription: String? {
         switch self {
         case .emptyInput:
@@ -495,6 +777,8 @@ enum TranslationError: LocalizedError {
             return "Failed to load model '\(name)'"
         case .translationFailed(let reason):
             return "Translation failed: \(reason)"
+        case .translationTimeout:
+            return "Translation timed out. Please try again."
         case .unsupportedLanguagePair:
             return "This language pair is not supported"
         case .invalidModelOutput:

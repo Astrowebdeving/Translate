@@ -8,20 +8,23 @@
 import SwiftUI
 
 struct ContentView: View {
-    @EnvironmentObject var appState: AppState
+    @Environment(AppState.self) var appState
     @State private var selectedTab: Tab = .camera
+    @State private var showOnboarding = false
     
     enum Tab: String, CaseIterable {
         case camera = "Camera"
         case image = "Image"
-        case history = "History"
+        case translate = "Translate"
+        case glossary = "Glossary"
         case settings = "Settings"
         
         var icon: String {
             switch self {
             case .camera: return "camera.viewfinder"
             case .image: return "photo.on.rectangle"
-            case .history: return "clock.arrow.circlepath"
+            case .translate: return "textformat"
+            case .glossary: return "text.book.closed"
             case .settings: return "gearshape"
             }
         }
@@ -41,11 +44,24 @@ struct ContentView: View {
                 }
                 .tag(Tab.image)
             
-            HistoryView()
-                .tabItem {
-                    Label(Tab.history.rawValue, systemImage: Tab.history.icon)
+            Group {
+                if #available(iOS 18.0, *) {
+                    TranslateView()
+                } else {
+                    // Fallback for iOS 17
+                    TranslateViewFallback()
                 }
-                .tag(Tab.history)
+            }
+            .tabItem {
+                Label(Tab.translate.rawValue, systemImage: Tab.translate.icon)
+            }
+            .tag(Tab.translate)
+            
+            GlossaryView()
+                .tabItem {
+                    Label(Tab.glossary.rawValue, systemImage: Tab.glossary.icon)
+                }
+                .tag(Tab.glossary)
             
             SettingsView()
                 .tabItem {
@@ -56,9 +72,12 @@ struct ContentView: View {
         .tint(.indigo)
         .onAppear {
             setupAppearance()
+            // Check if onboarding needed
+            showOnboarding = !appState.hasCompletedOnboarding
         }
-        .sheet(isPresented: .constant(!appState.hasCompletedOnboarding)) {
-            OnboardingView()
+        .sheet(isPresented: $showOnboarding) {
+            OnboardingView(isPresented: $showOnboarding)
+                .interactiveDismissDisabled()
         }
     }
     
@@ -76,7 +95,8 @@ struct ContentView: View {
 // MARK: - Onboarding View
 
 struct OnboardingView: View {
-    @EnvironmentObject var appState: AppState
+    @Environment(AppState.self) var appState
+    @Binding var isPresented: Bool
     @State private var currentPage = 0
     
     var body: some View {
@@ -116,6 +136,7 @@ struct OnboardingView: View {
                     }
                 } else {
                     appState.completeOnboarding()
+                    isPresented = false
                 }
             } label: {
                 Text(currentPage < 2 ? "Continue" : "Get Started")
@@ -129,7 +150,6 @@ struct OnboardingView: View {
             .padding(.horizontal, 24)
             .padding(.bottom, 40)
         }
-        .interactiveDismissDisabled()
     }
 }
 
@@ -164,9 +184,113 @@ struct OnboardingPage: View {
     }
 }
 
+// MARK: - Translate View Fallback (iOS 17)
+
+/// Fallback translation view for iOS versions below 18
+struct TranslateViewFallback: View {
+    @Environment(AppState.self) var appState
+    @State private var inputText = ""
+    @State private var outputText = ""
+    @State private var isTranslating = false
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 16) {
+                // Input
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("From: \(appState.sourceLanguage.name)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    TextEditor(text: $inputText)
+                        .frame(height: 120)
+                        .padding(8)
+                        .background(Color(.systemGray6))
+                        .cornerRadius(12)
+                }
+                .padding(.horizontal)
+                
+                // Translate button
+                Button {
+                    Task { await translate() }
+                } label: {
+                    HStack {
+                        if isTranslating {
+                            ProgressView()
+                                .tint(.white)
+                        } else {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                        }
+                        Text("Translate")
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.indigo)
+                    .foregroundColor(.white)
+                    .cornerRadius(12)
+                }
+                .disabled(inputText.isEmpty || isTranslating)
+                .padding(.horizontal)
+                
+                // Output
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("To: \(appState.targetLanguage.name)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    ScrollView {
+                        Text(outputText.isEmpty ? "Translation will appear here..." : outputText)
+                            .foregroundColor(outputText.isEmpty ? .secondary : .primary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding()
+                    }
+                    .frame(height: 120)
+                    .background(Color(.systemGray6))
+                    .cornerRadius(12)
+                }
+                .padding(.horizontal)
+                
+                Spacer()
+                
+                // Note about iOS 18
+                Text("💡 Update to iOS 18+ for Apple Translation and more features")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .padding()
+            }
+            .navigationTitle("Translate")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        appState.swapLanguages()
+                    } label: {
+                        Image(systemName: "arrow.left.arrow.right")
+                    }
+                }
+            }
+        }
+    }
+    
+    private func translate() async {
+        isTranslating = true
+        defer { isTranslating = false }
+        
+        do {
+            let result = try await appState.translationService.translate(
+                text: inputText,
+                from: appState.sourceLanguage,
+                to: appState.targetLanguage
+            )
+            outputText = result.translatedText
+        } catch {
+            outputText = "Error: \(error.localizedDescription)"
+        }
+    }
+}
+
 // MARK: - Preview
 
 #Preview {
     ContentView()
-        .environmentObject(AppState())
+        .environment(AppState())
 }

@@ -9,15 +9,15 @@ import SwiftUI
 
 @main
 struct TranslateLocalApp: App {
-    @StateObject private var appState = AppState()
+    @State private var appState = AppState()
     
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .environmentObject(appState)
-                .environmentObject(appState.ocrService)
-                .environmentObject(appState.translationService)
-                .environmentObject(appState.modelManager)
+                .environment(appState)
+                .environment(appState.ocrService)
+                .environment(appState.translationService)
+                .environment(appState.modelManager)
         }
     }
 }
@@ -25,8 +25,8 @@ struct TranslateLocalApp: App {
 // MARK: - App State
 
 /// Global app state management
-@MainActor
-class AppState: ObservableObject {
+@MainActor @Observable
+class AppState {
     
     // MARK: - Services
     
@@ -36,23 +36,23 @@ class AppState: ObservableObject {
     
     // MARK: - Settings
     
-    @Published var sourceLanguage: Language = .english
-    @Published var targetLanguage: Language = .japanese
-    @Published var autoDetectLanguage: Bool = true
-    @Published var continuousTranslation: Bool = false
-    @Published var hapticFeedback: Bool = true
+    var sourceLanguage: Language = .english
+    var targetLanguage: Language = .japanese
+    var autoDetectLanguage: Bool = true
+    var continuousTranslation: Bool = false
+    var hapticFeedback: Bool = true
     
     // MARK: - State
     
-    @Published var isFirstLaunch: Bool
-    @Published var hasCompletedOnboarding: Bool
+    var isFirstLaunch: Bool = false
+    var hasCompletedOnboarding: Bool = false
     
     // MARK: - Initialization
     
     init() {
         self.modelManager = ModelManager.shared
         self.ocrService = OCRService()
-        self.translationService = TranslationService(modelManager: modelManager)
+        self.translationService = TranslationService(modelManager: ModelManager.shared)
         
         // Check first launch
         self.isFirstLaunch = !UserDefaults.standard.bool(forKey: "hasLaunchedBefore")

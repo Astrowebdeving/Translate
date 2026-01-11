@@ -9,22 +9,28 @@ import Foundation
 import Combine
 import UIKit
 
-@MainActor
-class TranslationViewModel: ObservableObject {
+// MARK: - Translation View Model
+
+@MainActor @Observable
+class TranslationViewModel {
     
-    // MARK: - Published Properties
+    // MARK: - Observable Properties
     
-    @Published var sourceText: String = ""
-    @Published var translatedText: String = ""
-    @Published var sourceLanguage: Language = .english
-    @Published var targetLanguage: Language = .japanese
-    @Published var isTranslating = false
-    @Published var error: String?
-    @Published var lastResult: TranslationResult?
+    var sourceText: String = "" {
+        didSet {
+            scheduleTranslation()
+        }
+    }
+    var translatedText: String = ""
+    var sourceLanguage: Language = .english
+    var targetLanguage: Language = .japanese
+    var isTranslating = false
+    var error: String?
+    var lastResult: TranslationResult?
     
     // Statistics
-    @Published var processingTime: TimeInterval = 0
-    @Published var modelUsed: String = ""
+    var processingTime: TimeInterval = 0
+    var modelUsed: String = ""
     
     // MARK: - Dependencies
     
@@ -35,7 +41,7 @@ class TranslationViewModel: ObservableObject {
     // MARK: - Private Properties
     
     private var translationTask: Task<Void, Never>?
-    private var cancellables = Set<AnyCancellable>()
+    private var debounceTask: Task<Void, Never>?
     
     // Debouncing
     private let debounceInterval: TimeInterval = 0.5
@@ -45,32 +51,30 @@ class TranslationViewModel: ObservableObject {
     init(
         translationService: TranslationService,
         ocrService: OCRService,
-        historyManager: HistoryManager = HistoryManager()
+        historyManager: HistoryManager
     ) {
         self.translationService = translationService
         self.ocrService = ocrService
         self.historyManager = historyManager
-        
-        setupBindings()
     }
     
-    // MARK: - Setup
+    // MARK: - Auto-translation Debounce
     
-    private func setupBindings() {
-        // Auto-translate when source text changes (debounced)
-        $sourceText
-            .debounce(for: .seconds(debounceInterval), scheduler: RunLoop.main)
-            .removeDuplicates()
-            .sink { [weak self] text in
-                guard !text.isEmpty else {
-                    self?.translatedText = ""
-                    return
-                }
-                Task {
-                    await self?.translate()
-                }
-            }
-            .store(in: &cancellables)
+    private func scheduleTranslation() {
+        // Cancel previous debounce task
+        debounceTask?.cancel()
+        
+        guard !sourceText.isEmpty else {
+            translatedText = ""
+            return
+        }
+        
+        // Schedule new debounced translation
+        debounceTask = Task {
+            try? await Task.sleep(for: .milliseconds(Int(debounceInterval * 1000)))
+            guard !Task.isCancelled else { return }
+            await translate()
+        }
     }
     
     // MARK: - Translation

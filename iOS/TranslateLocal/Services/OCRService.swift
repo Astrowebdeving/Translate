@@ -80,14 +80,14 @@ struct OCRConfiguration {
 // MARK: - OCR Service
 
 /// Service for performing on-device OCR using Vision framework
-@MainActor
-class OCRService: ObservableObject {
+@MainActor @Observable
+class OCRService {
     
-    // MARK: - Published Properties
+    // MARK: - Observable Properties
     
-    @Published private(set) var isProcessing = false
-    @Published private(set) var lastResult: OCRResult?
-    @Published private(set) var error: OCRError?
+    private(set) var isProcessing = false
+    private(set) var lastResult: OCRResult?
+    private(set) var error: OCRError?
     
     // MARK: - Private Properties
     
@@ -201,53 +201,41 @@ class OCRService: ObservableObject {
     }
     
     private func performRecognition(cgImage: CGImage, orientation: CGImagePropertyOrientation) async throws -> RecognitionResult {
+        let config = self.configuration
         return try await withCheckedThrowingContinuation { continuation in
-            processingQueue.async { [weak self] in
-                guard let self = self else {
-                    continuation.resume(throwing: OCRError.serviceUnavailable)
-                    return
-                }
-                
+            self.processingQueue.async {
                 let handler = VNImageRequestHandler(
                     cgImage: cgImage,
                     orientation: orientation,
                     options: [:]
                 )
                 
-                self.executeRecognition(handler: handler, continuation: continuation)
+                self.executeRecognition(handler: handler, configuration: config, continuation: continuation)
             }
         }
     }
     
     private func performRecognition(pixelBuffer: CVPixelBuffer) async throws -> RecognitionResult {
+        let config = self.configuration
         return try await withCheckedThrowingContinuation { continuation in
-            processingQueue.async { [weak self] in
-                guard let self = self else {
-                    continuation.resume(throwing: OCRError.serviceUnavailable)
-                    return
-                }
-                
+            self.processingQueue.async {
                 let handler = VNImageRequestHandler(
                     cvPixelBuffer: pixelBuffer,
                     orientation: .up,
                     options: [:]
                 )
                 
-                self.executeRecognition(handler: handler, continuation: continuation)
+                self.executeRecognition(handler: handler, configuration: config, continuation: continuation)
             }
         }
     }
     
     private func executeRecognition(
         handler: VNImageRequestHandler,
+        configuration: OCRConfiguration,
         continuation: CheckedContinuation<RecognitionResult, Error>
     ) {
-        let request = VNRecognizeTextRequest { [weak self] request, error in
-            guard let self = self else {
-                continuation.resume(throwing: OCRError.serviceUnavailable)
-                return
-            }
-            
+        let request = VNRecognizeTextRequest { request, error in
             if let error = error {
                 continuation.resume(throwing: OCRError.recognitionFailed(error.localizedDescription))
                 return
@@ -258,7 +246,7 @@ class OCRService: ObservableObject {
                 return
             }
             
-            let result = self.processObservations(observations)
+            let result = self.processObservations(observations, configuration: configuration)
             continuation.resume(returning: result)
         }
         
@@ -280,7 +268,7 @@ class OCRService: ObservableObject {
         }
     }
     
-    private func processObservations(_ observations: [VNRecognizedTextObservation]) -> RecognitionResult {
+    private func processObservations(_ observations: [VNRecognizedTextObservation], configuration: OCRConfiguration) -> RecognitionResult {
         var textBlocks: [RecognizedTextBlock] = []
         var fullTextComponents: [String] = []
         var detectedLanguages: Set<String> = []

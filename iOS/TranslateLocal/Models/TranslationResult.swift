@@ -55,16 +55,15 @@ struct LanguageInfo: Codable, Hashable {
     let name: String
     let nativeName: String
     
-    init(from language: Language) {
-        self.code = language.id
-        self.name = language.name
-        self.nativeName = language.nativeName
-    }
-    
     init(code: String, name: String, nativeName: String) {
         self.code = code
         self.name = name
         self.nativeName = nativeName
+    }
+    
+    /// Create from a Language instance
+    static func from(_ language: Language) -> LanguageInfo {
+        LanguageInfo(code: language.id, name: language.name, nativeName: language.nativeName)
     }
 }
 

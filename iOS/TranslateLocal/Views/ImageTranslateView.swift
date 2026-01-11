@@ -9,9 +9,7 @@ import SwiftUI
 import PhotosUI
 
 struct ImageTranslateView: View {
-    @EnvironmentObject var appState: AppState
-    @EnvironmentObject var ocrService: OCRService
-    @EnvironmentObject var translationService: TranslationService
+    @Environment(AppState.self) var appState
     
     @State private var selectedImage: UIImage?
     @State private var selectedItem: PhotosPickerItem?
@@ -343,14 +341,16 @@ struct ImageTranslateView: View {
     private func processImage() async {
         guard let image = selectedImage else { return }
         
-        isProcessing = true
-        recognizedBlocks = []
-        translatedTexts = [:]
-        fullTranslation = ""
+        await MainActor.run {
+            isProcessing = true
+            recognizedBlocks = []
+            translatedTexts = [:]
+            fullTranslation = ""
+        }
         
         do {
             // Run OCR
-            let result = try await ocrService.recognizeText(from: image)
+            let result = try await appState.ocrService.recognizeText(from: image)
             
             await MainActor.run {
                 recognizedBlocks = result.textBlocks
@@ -358,7 +358,7 @@ struct ImageTranslateView: View {
             
             // Translate each block
             for block in result.textBlocks {
-                let translation = try await translationService.translate(
+                let translation = try await appState.translationService.translate(
                     text: block.text,
                     from: appState.sourceLanguage,
                     to: appState.targetLanguage
@@ -450,7 +450,5 @@ struct ImagePicker: UIViewControllerRepresentable {
 
 #Preview {
     ImageTranslateView()
-        .environmentObject(AppState())
-        .environmentObject(OCRService())
-        .environmentObject(TranslationService())
+        .environment(AppState())
 }

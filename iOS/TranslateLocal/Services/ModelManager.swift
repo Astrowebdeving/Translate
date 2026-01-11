@@ -22,11 +22,33 @@ struct ModelInfo: Identifiable, Codable {
     let downloadURL: URL?
     let sourceLanguages: [String]
     let targetLanguages: [String]
+    var isDownloaded: Bool = false
     
     var sizeFormatted: String {
         let formatter = ByteCountFormatter()
         formatter.countStyle = .file
         return formatter.string(fromByteCount: sizeBytes)
+    }
+}
+
+/// Remote model registry for downloadable models
+struct ModelRegistry {
+    // HuggingFace Hub URLs for Opus-MT models (these are the real HF repo URLs)
+    static let modelDownloadURLs: [TranslationModelType: String] = [
+        // Spanish ↔ English
+        .opusEnEs: "https://huggingface.co/Helsinki-NLP/opus-mt-en-es/resolve/main/pytorch_model.bin",
+        .opusEsEn: "https://huggingface.co/Helsinki-NLP/opus-mt-es-en/resolve/main/pytorch_model.bin",
+        // Chinese ↔ English
+        .opusEnZh: "https://huggingface.co/Helsinki-NLP/opus-mt-en-zh/resolve/main/pytorch_model.bin",
+        .opusZhEn: "https://huggingface.co/Helsinki-NLP/opus-mt-zh-en/resolve/main/pytorch_model.bin",
+        // Japanese ↔ English
+        .opusEnJa: "https://huggingface.co/Helsinki-NLP/opus-mt-en-jap/resolve/main/pytorch_model.bin",
+        .opusJaEn: "https://huggingface.co/Helsinki-NLP/opus-mt-jap-en/resolve/main/pytorch_model.bin",
+    ]
+    
+    static func downloadURL(for model: TranslationModelType) -> URL? {
+        guard let urlString = modelDownloadURLs[model] else { return nil }
+        return URL(string: urlString)
     }
 }
 
@@ -45,20 +67,20 @@ struct ModelDownloadProgress {
 // MARK: - Model Manager
 
 /// Singleton manager for ML model lifecycle
-@MainActor
-class ModelManager: ObservableObject {
+@MainActor @Observable
+class ModelManager {
     
     // MARK: - Singleton
     
     static let shared = ModelManager()
     
-    // MARK: - Published Properties
+    // MARK: - Observable Properties
     
-    @Published private(set) var availableModels: [TranslationModelType: ModelInfo] = [:]
-    @Published private(set) var loadedModels: Set<TranslationModelType> = []
-    @Published private(set) var downloadProgress: ModelDownloadProgress?
-    @Published private(set) var isDownloading = false
-    @Published private(set) var error: ModelManagerError?
+    private(set) var availableModels: [TranslationModelType: ModelInfo] = [:]
+    private(set) var loadedModels: Set<TranslationModelType> = []
+    private(set) var downloadProgress: ModelDownloadProgress?
+    private(set) var isDownloading = false
+    private(set) var error: ModelManagerError?
     
     // MARK: - Private Properties
     

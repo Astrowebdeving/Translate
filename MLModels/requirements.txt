@@ -1,0 +1,47 @@
+# TranslateLocal - Model Conversion Requirements
+# Python 3.10+ required
+
+# Core ML Tools for iOS model conversion
+coremltools>=7.2
+
+# Transformers for loading HuggingFace models
+transformers>=4.40.0
+
+# PyTorch for model handling
+torch>=2.2.0
+torchvision>=0.17.0
+torchaudio>=2.2.0
+
+# SentencePiece for tokenization (required by many multilingual models)
+sentencepiece>=0.2.0
+
+# Accelerate for efficient model loading
+accelerate>=0.28.0
+
+# ONNX for intermediate conversion (optional but recommended)
+onnx>=1.15.0
+onnxruntime>=1.17.0
+
+# Optimum for optimization pipelines
+optimum>=1.17.0
+
+# NumPy for numerical operations
+numpy>=1.26.0
+
+# Pillow for image handling in testing
+Pillow>=10.2.0
+
+# Progress bars
+tqdm>=4.66.0
+
+# Hugging Face Hub for model downloads
+huggingface_hub>=0.21.0
+
+# Safetensors for efficient model loading
+safetensors>=0.4.2
+
+# Testing
+pytest>=8.0.0
+
+# Logging and utilities
+rich>=13.7.0

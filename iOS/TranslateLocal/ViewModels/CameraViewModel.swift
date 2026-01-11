@@ -10,19 +10,19 @@ import AVFoundation
 import Combine
 import Vision
 
-@MainActor
-class CameraViewModel: ObservableObject {
+@MainActor @Observable
+class CameraViewModel {
     
-    // MARK: - Published Properties
+    // MARK: - Observable Properties
     
-    @Published var isActive = false
-    @Published var isPaused = false
-    @Published var flashEnabled = false
-    @Published var recognizedBlocks: [RecognizedTextBlock] = []
-    @Published var translatedTexts: [UUID: String] = [:]
-    @Published var isTranslating = false
-    @Published var error: String?
-    @Published var fps: Double = 0
+    var isActive = false
+    var isPaused = false
+    var flashEnabled = false
+    var recognizedBlocks: [RecognizedTextBlock] = []
+    var translatedTexts: [UUID: String] = [:]
+    var isTranslating = false
+    var error: String?
+    var fps: Double = 0
     
     // MARK: - Dependencies
     
@@ -33,10 +33,9 @@ class CameraViewModel: ObservableObject {
     
     private var lastProcessedTime: Date = Date()
     private var frameCount = 0
-    private var cancellables = Set<AnyCancellable>()
     
     // Throttling
-    private let processingInterval: TimeInterval = 0.3  // Process every 300ms
+    private let processingInterval: TimeInterval = 1.0  // Process every 1 second (matches CameraTranslateView)
     private var lastOCRTime: Date = .distantPast
     
     // MARK: - Initialization
@@ -168,9 +167,9 @@ enum CameraPermissionStatus {
     case restricted
 }
 
-@MainActor
-class CameraPermissionManager: ObservableObject {
-    @Published var status: CameraPermissionStatus = .notDetermined
+@MainActor @Observable
+class CameraPermissionManager {
+    var status: CameraPermissionStatus = .notDetermined
     
     init() {
         checkStatus()
@@ -193,9 +192,7 @@ class CameraPermissionManager: ObservableObject {
     
     func requestPermission() async -> Bool {
         let granted = await AVCaptureDevice.requestAccess(for: .video)
-        await MainActor.run {
-            status = granted ? .authorized : .denied
-        }
+        status = granted ? .authorized : .denied
         return granted
     }
 }

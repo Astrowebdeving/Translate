@@ -39,9 +39,9 @@ struct TranslationHistoryItem: Identifiable, Codable {
 
 // MARK: - History Manager
 
-@MainActor
-class HistoryManager: ObservableObject {
-    @Published var items: [TranslationHistoryItem] = []
+@MainActor @Observable
+class HistoryManager {
+    var items: [TranslationHistoryItem] = []
     
     private let maxItems = 500
     private let storageKey = "translationHistory"
@@ -104,7 +104,7 @@ class HistoryManager: ObservableObject {
 // MARK: - History View
 
 struct HistoryView: View {
-    @StateObject private var historyManager = HistoryManager()
+    @State private var historyManager = HistoryManager()
     @State private var searchText = ""
     @State private var showFavoritesOnly = false
     @State private var selectedItem: TranslationHistoryItem?
