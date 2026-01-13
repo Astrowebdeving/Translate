@@ -113,7 +113,7 @@ struct OnboardingView: View {
                 OnboardingPage(
                     icon: "lock.shield",
                     title: "100% Private",
-                    description: "All translation happens on your device. Your text never leaves your iPhone.",
+                    description: "All translation happens on your device. Without your permission in the cloud services tab, your text never leaves your iPhone.",
                     color: .green
                 )
                 .tag(1)

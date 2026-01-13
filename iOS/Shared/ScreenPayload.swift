@@ -9,6 +9,30 @@
 import Foundation
 import CoreGraphics
 
+// MARK: - Text Block Classification
+
+/// Type of UI text block for smart translation positioning
+enum TextBlockType: String, Codable, CaseIterable {
+    case header      // Large title text, typically at top
+    case body        // Regular paragraph or content text
+    case button      // Button labels, typically short
+    case label       // Form labels, captions
+    case navigation  // Navigation items, tab bars, menus
+    case unknown     // Unclassified text
+    
+    /// Suggested font scale relative to base size
+    var suggestedFontScale: CGFloat {
+        switch self {
+        case .header: return 1.5
+        case .body: return 1.0
+        case .button: return 0.9
+        case .label: return 0.85
+        case .navigation: return 0.8
+        case .unknown: return 1.0
+        }
+    }
+}
+
 // MARK: - Screen Payload (Extension → App)
 
 /// Payload containing OCR results from the Broadcast Extension
@@ -60,12 +84,27 @@ struct ScreenTextBlock: Codable, Identifiable, Equatable {
     let boundingBox: CGRect  // Normalized coordinates (0-1)
     let language: String?
     
-    init(text: String, confidence: Float, boundingBox: CGRect, language: String? = nil) {
+    /// Classification of the text block type (header, body, button, etc.)
+    let blockType: TextBlockType
+    
+    /// Estimated font size in points (based on bounding box height and screen size)
+    let estimatedFontSize: CGFloat?
+    
+    init(
+        text: String,
+        confidence: Float,
+        boundingBox: CGRect,
+        language: String? = nil,
+        blockType: TextBlockType = .unknown,
+        estimatedFontSize: CGFloat? = nil
+    ) {
         self.id = UUID()
         self.text = text
         self.confidence = confidence
         self.boundingBox = boundingBox
         self.language = language
+        self.blockType = blockType
+        self.estimatedFontSize = estimatedFontSize
     }
 }
 
@@ -109,6 +148,75 @@ struct TranslatedBlock: Codable, Equatable {
     let sourceLanguage: String
     let targetLanguage: String
     let confidence: Float
+}
+
+// MARK: - Positioned Translation (for Overlay Display)
+
+/// Translation with position information for overlay rendering
+/// Used by Gemma 3n E2B smart positioning
+struct PositionedTranslation: Codable, Identifiable, Equatable {
+    let id: UUID
+    
+    /// Original text from OCR
+    let originalText: String
+    
+    /// Translated text from Gemma
+    let translatedText: String
+    
+    /// Classification of the text block
+    let blockType: TextBlockType
+    
+    /// Original bounding box from OCR (normalized 0-1 coordinates)
+    let originalRect: CGRect
+    
+    /// Adjusted bounding box for translation display (normalized 0-1 coordinates)
+    /// May differ from original if translation is longer/shorter
+    let adjustedRect: CGRect
+    
+    /// Font scale relative to base size (0.5 - 2.0)
+    let fontScale: CGFloat
+    
+    /// Source language code
+    let sourceLanguage: String
+    
+    /// Target language code
+    let targetLanguage: String
+    
+    init(
+        originalText: String,
+        translatedText: String,
+        blockType: TextBlockType,
+        originalRect: CGRect,
+        adjustedRect: CGRect? = nil,
+        fontScale: CGFloat = 1.0,
+        sourceLanguage: String = "auto",
+        targetLanguage: String = "en"
+    ) {
+        self.id = UUID()
+        self.originalText = originalText
+        self.translatedText = translatedText
+        self.blockType = blockType
+        self.originalRect = originalRect
+        self.adjustedRect = adjustedRect ?? originalRect
+        self.fontScale = fontScale
+        self.sourceLanguage = sourceLanguage
+        self.targetLanguage = targetLanguage
+    }
+    
+    /// Map normalized coordinates to pixel coordinates for a given overlay size
+    func pixelRect(for overlaySize: CGSize) -> CGRect {
+        return CGRect(
+            x: adjustedRect.minX * overlaySize.width,
+            y: (1 - adjustedRect.maxY) * overlaySize.height, // Flip Y axis (Vision uses bottom-left origin)
+            width: adjustedRect.width * overlaySize.width,
+            height: adjustedRect.height * overlaySize.height
+        )
+    }
+    
+    /// Calculate font size for overlay rendering
+    func fontSize(baseSize: CGFloat = 16) -> CGFloat {
+        return baseSize * fontScale
+    }
 }
 
 /// Status of translation

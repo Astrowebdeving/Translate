@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import ZIPFoundation
 
 struct ModelDownloadView: View {
     @Environment(AppState.self) var appState
@@ -174,7 +175,7 @@ struct AvailableModelRow: View {
 // MARK: - Model Download Manager
 
 @MainActor
-class ModelDownloadManager: ObservableObject {
+class ModelDownloadManager: NSObject, ObservableObject, URLSessionDownloadDelegate {
     @Published var availableModels: [DownloadableModelInfo] = []
     @Published var downloadedModels: [DownloadableModelInfo] = []
     @Published var isDownloading = false
@@ -185,15 +186,29 @@ class ModelDownloadManager: ObservableObject {
     
     private let fileManager = FileManager.default
     private let modelsDirectory: URL
+    private var downloadTask: URLSessionDownloadTask?
+    private var downloadSession: URLSession?
+    private var currentModel: DownloadableModelInfo?
+    private var downloadContinuation: CheckedContinuation<URL, Error>?
+    
+    // HuggingFace dataset repo
+    private let baseURL = "https://huggingface.co/datasets/tu101/models_MLconverted/resolve/main"
     
     var storageUsedFormatted: String {
         ByteCountFormatter.string(fromByteCount: storageUsed, countStyle: .file)
     }
     
-    init() {
+    override init() {
         let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         modelsDirectory = appSupport.appendingPathComponent("TranslateLocal/Models", isDirectory: true)
+        
+        super.init()
+        
         try? fileManager.createDirectory(at: modelsDirectory, withIntermediateDirectories: true)
+        
+        // Create URL session with delegate for progress tracking
+        let config = URLSessionConfiguration.default
+        downloadSession = URLSession(configuration: config, delegate: self, delegateQueue: .main)
         
         loadAvailableModels()
         scanDownloadedModels()
@@ -209,88 +224,134 @@ class ModelDownloadManager: ObservableObject {
     }
     
     private func loadAvailableModels() {
-        // These models need to be pre-converted to CoreML format and hosted
-        // For now, we provide information about what would be available
+        // Models available from https://huggingface.co/datasets/tu101/models_MLconverted
         availableModels = [
+            // Chinese ↔ English
             DownloadableModelInfo(
                 id: "opus-zh-en",
                 displayName: "Chinese → English",
                 languagePair: "ZH → EN",
                 description: "Helsinki-NLP Opus-MT model",
-                estimatedSizeMB: 180,
-                huggingFaceId: "Helsinki-NLP/opus-mt-zh-en"
+                sizeBytes: 205_296_859,
+                downloadURL: "\(baseURL)/OpusMT_zh_en.zip"
             ),
             DownloadableModelInfo(
                 id: "opus-en-zh",
                 displayName: "English → Chinese",
                 languagePair: "EN → ZH",
                 description: "Helsinki-NLP Opus-MT model",
-                estimatedSizeMB: 180,
-                huggingFaceId: "Helsinki-NLP/opus-mt-en-zh"
+                sizeBytes: 205_838_546,
+                downloadURL: "\(baseURL)/OpusMT_en_zh.zip"
             ),
-            DownloadableModelInfo(
-                id: "opus-ja-en",
-                displayName: "Japanese → English",
-                languagePair: "JA → EN",
-                description: "Helsinki-NLP Opus-MT model",
-                estimatedSizeMB: 180,
-                huggingFaceId: "Helsinki-NLP/opus-mt-ja-en"
-            ),
+            
+            // Japanese
             DownloadableModelInfo(
                 id: "opus-en-ja",
                 displayName: "English → Japanese",
                 languagePair: "EN → JA",
                 description: "Helsinki-NLP Opus-MT model",
-                estimatedSizeMB: 180,
-                huggingFaceId: "Helsinki-NLP/opus-mt-en-ja"
+                sizeBytes: 169_436_284,
+                downloadURL: "\(baseURL)/OpusMT_en_ja.zip"
             ),
+            
+            // Spanish ↔ English
             DownloadableModelInfo(
                 id: "opus-es-en",
                 displayName: "Spanish → English",
                 languagePair: "ES → EN",
                 description: "Helsinki-NLP Opus-MT model",
-                estimatedSizeMB: 150,
-                huggingFaceId: "Helsinki-NLP/opus-mt-es-en"
+                sizeBytes: 204_796_283,
+                downloadURL: "\(baseURL)/OpusMT_es_en.zip"
             ),
             DownloadableModelInfo(
                 id: "opus-en-es",
                 displayName: "English → Spanish",
                 languagePair: "EN → ES",
                 description: "Helsinki-NLP Opus-MT model",
-                estimatedSizeMB: 150,
-                huggingFaceId: "Helsinki-NLP/opus-mt-en-es"
+                sizeBytes: 205_293_000,
+                downloadURL: "\(baseURL)/OpusMT_en_es.zip"
             ),
-            DownloadableModelInfo(
-                id: "opus-fr-en",
-                displayName: "French → English",
-                languagePair: "FR → EN",
-                description: "Helsinki-NLP Opus-MT model",
-                estimatedSizeMB: 150,
-                huggingFaceId: "Helsinki-NLP/opus-mt-fr-en"
-            ),
-            DownloadableModelInfo(
-                id: "opus-en-fr",
-                displayName: "English → French",
-                languagePair: "EN → FR",
-                description: "Helsinki-NLP Opus-MT model",
-                estimatedSizeMB: 150,
-                huggingFaceId: "Helsinki-NLP/opus-mt-en-fr"
-            ),
+            
+            // German ↔ English
             DownloadableModelInfo(
                 id: "opus-de-en",
                 displayName: "German → English",
                 languagePair: "DE → EN",
                 description: "Helsinki-NLP Opus-MT model",
-                estimatedSizeMB: 150,
-                huggingFaceId: "Helsinki-NLP/opus-mt-de-en"
+                sizeBytes: 191_192_950,
+                downloadURL: "\(baseURL)/OpusMT_de_en.zip"
             ),
             DownloadableModelInfo(
                 id: "opus-en-de",
                 displayName: "English → German",
                 languagePair: "EN → DE",
                 description: "Helsinki-NLP Opus-MT model",
-                estimatedSizeMB: 150,
-                huggingFaceId: "Helsinki-NLP/opus-mt-en-de"
+                sizeBytes: 191_378_939,
+                downloadURL: "\(baseURL)/OpusMT_en_de.zip"
+            ),
+            
+            // French ↔ English
+            DownloadableModelInfo(
+                id: "opus-fr-en",
+                displayName: "French → English",
+                languagePair: "FR → EN",
+                description: "Helsinki-NLP Opus-MT model",
+                sizeBytes: 194_426_148,
+                downloadURL: "\(baseURL)/OpusMT_fr_en.zip"
+            ),
+            DownloadableModelInfo(
+                id: "opus-en-fr",
+                displayName: "English → French",
+                languagePair: "EN → FR",
+                description: "Helsinki-NLP Opus-MT model",
+                sizeBytes: 194_811_935,
+                downloadURL: "\(baseURL)/OpusMT_en_fr.zip"
+            ),
+            
+            // Russian ↔ English
+            DownloadableModelInfo(
+                id: "opus-ru-en",
+                displayName: "Russian → English",
+                languagePair: "RU → EN",
+                description: "Helsinki-NLP Opus-MT model",
+                sizeBytes: 201_043_998,
+                downloadURL: "\(baseURL)/OpusMT_ru_en.zip"
+            ),
+            DownloadableModelInfo(
+                id: "opus-en-ru",
+                displayName: "English → Russian",
+                languagePair: "EN → RU",
+                description: "Helsinki-NLP Opus-MT model",
+                sizeBytes: 200_996_436,
+                downloadURL: "\(baseURL)/OpusMT_en_ru.zip"
+            ),
+            
+            // Hindi ↔ English
+            DownloadableModelInfo(
+                id: "opus-hi-en",
+                displayName: "Hindi → English",
+                languagePair: "HI → EN",
+                description: "Helsinki-NLP Opus-MT model",
+                sizeBytes: 197_834_980,
+                downloadURL: "\(baseURL)/OpusMT_hi_en.zip"
+            ),
+            DownloadableModelInfo(
+                id: "opus-en-hi",
+                displayName: "English → Hindi",
+                languagePair: "EN → HI",
+                description: "Helsinki-NLP Opus-MT model",
+                sizeBytes: 199_480_410,
+                downloadURL: "\(baseURL)/OpusMT_en_hi.zip"
+            ),
+            
+            // Korean → English
+            DownloadableModelInfo(
+                id: "opus-ko-en",
+                displayName: "Korean → English",
+                languagePair: "KO → EN",
+                description: "Helsinki-NLP Opus-MT model",
+                sizeBytes: 200_000_000,  // Estimated, update after conversion
+                downloadURL: "\(baseURL)/OpusMT_ko_en.zip"
             ),
         ]
     }
@@ -304,7 +365,8 @@ class ModelDownloadManager: ObservableObject {
         ) else { return }
         
         for url in contents {
-            let modelId = url.deletingPathExtension().lastPathComponent
+            // Get model ID from folder name (e.g., "opus-zh-en" from "opus-zh-en/")
+            let modelId = url.lastPathComponent
             if let model = availableModels.first(where: { $0.id == modelId }) {
                 downloaded.append(model)
             }
@@ -332,54 +394,80 @@ class ModelDownloadManager: ObservableObject {
     
     func downloadModel(_ model: DownloadableModelInfo) async {
         guard !isDownloading else { return }
+        guard let url = URL(string: model.downloadURL) else {
+            error = "Invalid download URL"
+            return
+        }
         
         isDownloading = true
         currentDownloadId = model.id
+        currentModel = model
         downloadProgress = 0
         error = nil
         
-        DebugLogger.info("Starting download for \(model.displayName)", category: .model)
+        DebugLogger.info("Starting download for \(model.displayName) from \(model.downloadURL)", category: .model)
         
-        // Note: In a real implementation, you would download pre-converted CoreML models
-        // from your own hosting (HuggingFace, GitHub Releases, S3, etc.)
-        // 
-        // The Opus-MT models on HuggingFace are in PyTorch format and need conversion.
-        // For a production app, you would:
-        // 1. Convert models to CoreML format using coremltools
-        // 2. Host the .mlpackage files on your server
-        // 3. Download and extract them here
-        
-        // Simulate download for demo (replace with real download)
-        for i in 0...10 {
-            try? await Task.sleep(nanoseconds: 100_000_000)
-            downloadProgress = Double(i) / 10.0
+        do {
+            // Download the zip file with progress tracking
+            let tempURL = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<URL, Error>) in
+                self.downloadContinuation = continuation
+                self.downloadTask = self.downloadSession?.downloadTask(with: url)
+                self.downloadTask?.resume()
+            }
+            
+            // Unzip the model
+            let modelDirectory = modelsDirectory.appendingPathComponent(model.id)
+            try await unzipModel(from: tempURL, to: modelDirectory)
+            
+            // Clean up temp file
+            try? fileManager.removeItem(at: tempURL)
+            
+            DebugLogger.success("Download complete for \(model.displayName)", category: .model)
+            
+            isDownloading = false
+            currentDownloadId = nil
+            currentModel = nil
+            downloadProgress = 1.0
+            
+            refresh()
+            
+        } catch {
+            DebugLogger.error("Download failed for \(model.displayName): \(error)", category: .model)
+            
+            isDownloading = false
+            currentDownloadId = nil
+            currentModel = nil
+            self.error = "Download failed: \(error.localizedDescription)"
         }
+    }
+    
+    private func unzipModel(from source: URL, to destination: URL) async throws {
+        // Remove existing if present
+        try? fileManager.removeItem(at: destination)
         
-        // Create a placeholder file to mark as "downloaded"
-        let modelPath = modelsDirectory.appendingPathComponent("\(model.id).placeholder")
-        try? "Demo model placeholder - replace with real CoreML model".write(to: modelPath, atomically: true, encoding: .utf8)
+        // Create destination directory
+        try fileManager.createDirectory(at: destination, withIntermediateDirectories: true)
         
-        DebugLogger.success("Download complete for \(model.displayName)", category: .model)
+        // Unzip using ZIPFoundation
+        try fileManager.unzipItem(at: source, to: destination)
         
+        DebugLogger.info("Unzipped model to \(destination.path)", category: .model)
+    }
+    
+    func cancelDownload() {
+        downloadTask?.cancel()
+        downloadTask = nil
         isDownloading = false
         currentDownloadId = nil
-        
-        // Show info about real implementation
-        error = "Demo mode: To enable real translation, you need to:\n1. Convert Opus-MT models to CoreML format\n2. Host them on your server\n3. Update the download URLs in the app\n\nSee MLModels/ folder for conversion scripts."
-        
-        refresh()
+        currentModel = nil
+        downloadProgress = 0
+        downloadContinuation?.resume(throwing: CancellationError())
+        downloadContinuation = nil
     }
     
     func deleteModel(_ model: DownloadableModelInfo) {
-        let modelPath = modelsDirectory.appendingPathComponent("\(model.id).placeholder")
+        let modelPath = modelsDirectory.appendingPathComponent(model.id)
         try? fileManager.removeItem(at: modelPath)
-        
-        // Also try deleting actual model formats
-        let mlmodelcPath = modelsDirectory.appendingPathComponent("\(model.id).mlmodelc")
-        try? fileManager.removeItem(at: mlmodelcPath)
-        
-        let mlpackagePath = modelsDirectory.appendingPathComponent("\(model.id).mlpackage")
-        try? fileManager.removeItem(at: mlpackagePath)
         
         DebugLogger.info("Deleted model \(model.displayName)", category: .model)
         refresh()
@@ -387,6 +475,41 @@ class ModelDownloadManager: ObservableObject {
     
     func clearError() {
         error = nil
+    }
+    
+    // MARK: - URLSessionDownloadDelegate
+    
+    nonisolated func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
+        let progress = Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)
+        Task { @MainActor in
+            self.downloadProgress = progress
+        }
+    }
+    
+    nonisolated func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
+        // Move to a persistent temp location before the delegate method returns
+        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".zip")
+        do {
+            try FileManager.default.moveItem(at: location, to: tempURL)
+            Task { @MainActor in
+                self.downloadContinuation?.resume(returning: tempURL)
+                self.downloadContinuation = nil
+            }
+        } catch {
+            Task { @MainActor in
+                self.downloadContinuation?.resume(throwing: error)
+                self.downloadContinuation = nil
+            }
+        }
+    }
+    
+    nonisolated func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        if let error = error {
+            Task { @MainActor in
+                self.downloadContinuation?.resume(throwing: error)
+                self.downloadContinuation = nil
+            }
+        }
     }
 }
 
@@ -397,11 +520,11 @@ struct DownloadableModelInfo: Identifiable {
     let displayName: String
     let languagePair: String
     let description: String
-    let estimatedSizeMB: Int
-    let huggingFaceId: String
+    let sizeBytes: Int64
+    let downloadURL: String
     
     var sizeFormatted: String {
-        "\(estimatedSizeMB) MB"
+        ByteCountFormatter.string(fromByteCount: sizeBytes, countStyle: .file)
     }
 }
 

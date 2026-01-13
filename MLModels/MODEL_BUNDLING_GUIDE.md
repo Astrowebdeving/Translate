@@ -144,13 +144,40 @@ The model files should be named to match `TranslationModelType.rawValue`:
 
 ---
 
-## Alternative: On-Demand Download
+## Alternative: On-Demand Download (One-Click Distribution)
 
-Instead of bundling, you can host models on a server:
+Instead of bundling all models (which makes the app huge), you can host them on Hugging Face. This allows users to download only the languages they need with "one click" inside the app.
 
-1. Convert models and upload to cloud storage (S3, CloudFlare R2)
-2. Create `models.json` index file
-3. Update `ModelManager.downloadModel()` with actual URLs
-4. Users download models they need
+### Step 1: Prepare your Hugging Face Repository
+1. Create a **Dataset** repository on Hugging Face (e.g., `yourusername/coreml-models`).
+2. Make sure it's public (or private if you handle authentication in the app).
 
-This keeps initial app size small (~50MB) but requires internet for first use.
+### Step 2: Run the One-Click Publish Script
+This script converts all common models, compiles them for iOS, and zips them for distribution.
+
+```bash
+cd MLModels
+# Replace with your actual HF username and repo name
+./publish_all.sh --repo yourusername/coreml-models
+```
+
+### Step 3: Upload to Hugging Face
+Once the script finishes, everything is in the `dist/` folder. Upload it:
+
+```bash
+# You'll need to run 'huggingface-cli login' first
+python hf_upload.py --repo yourusername/coreml-models
+```
+
+### Step 4: Configure the iOS App
+1. Open `iOS/TranslateLocal/Services/CoreMLModelDownloader.swift`.
+2. Update the `huggingFaceRepo` variable:
+
+```swift
+private let huggingFaceRepo = "yourusername/coreml-models"
+```
+
+### How it works for the User:
+1. When the user opens the "Download Models" screen, the app fetches `registry.json` from your HF repo.
+2. It shows the list of available models (Opus pairs and Gemma).
+3. The user taps "Download", the app fetches the `.zip`, extracts the `.mlmodelc`, and it's ready for local translation instantly!

@@ -31,6 +31,9 @@ numpy>=1.26.0
 # Pillow for image handling in testing
 Pillow>=10.2.0
 
+# timm for vision models (required by Gemma 3n)
+timm>=1.0.0
+
 # Progress bars
 tqdm>=4.66.0
 

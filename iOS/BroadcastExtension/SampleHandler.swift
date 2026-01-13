@@ -175,11 +175,26 @@ class SampleHandler: RPBroadcastSampleHandler {
             
             let language = detectLanguage(for: topCandidate.string)
             
+            // Classify the text block based on position and size
+            let blockType = classifyTextBlock(
+                text: topCandidate.string,
+                boundingBox: observation.boundingBox,
+                screenSize: currentScreenSize
+            )
+            
+            // Estimate font size from bounding box
+            let estimatedFontSize = estimateFontSize(
+                boundingBox: observation.boundingBox,
+                screenSize: currentScreenSize
+            )
+            
             let block = ScreenTextBlock(
                 text: topCandidate.string,
                 confidence: topCandidate.confidence,
                 boundingBox: observation.boundingBox,
-                language: language
+                language: language,
+                blockType: blockType,
+                estimatedFontSize: estimatedFontSize
             )
             
             textBlocks.append(block)
@@ -213,6 +228,72 @@ class SampleHandler: RPBroadcastSampleHandler {
         
         // Write to shared container
         writePayload(payload)
+    }
+    
+    // MARK: - Text Block Classification
+    
+    /// Classify a text block based on its position and size
+    private func classifyTextBlock(
+        text: String,
+        boundingBox: CGRect,
+        screenSize: CGSize
+    ) -> TextBlockType {
+        let normalizedHeight = boundingBox.height
+        let normalizedWidth = boundingBox.width
+        let normalizedY = boundingBox.minY  // Vision uses bottom-left origin
+        
+        // Estimate character count per line
+        let textLength = text.count
+        let isShortText = textLength < 20
+        let isMediumText = textLength >= 20 && textLength < 100
+        
+        // Position-based heuristics (normalized coordinates 0-1)
+        let isAtTop = normalizedY > 0.85  // Near top of screen
+        let isAtBottom = normalizedY < 0.15  // Near bottom of screen
+        
+        // Size-based heuristics
+        let isLarge = normalizedHeight > 0.05  // Large text (>5% of screen height)
+        let isSmall = normalizedHeight < 0.025  // Small text (<2.5% of screen height)
+        let isWide = normalizedWidth > 0.5  // Wide text block
+        let isNarrow = normalizedWidth < 0.2  // Narrow text block
+        
+        // Classification logic
+        if isAtTop && isLarge && isWide {
+            return .header
+        }
+        
+        if isAtBottom && isSmall {
+            return .navigation
+        }
+        
+        if isShortText && isNarrow && !isLarge {
+            return .button
+        }
+        
+        if isShortText && !isWide {
+            return .label
+        }
+        
+        if isMediumText || isWide {
+            return .body
+        }
+        
+        return .unknown
+    }
+    
+    /// Estimate font size from bounding box height and screen size
+    private func estimateFontSize(
+        boundingBox: CGRect,
+        screenSize: CGSize
+    ) -> CGFloat {
+        // Calculate pixel height of the bounding box
+        let pixelHeight = boundingBox.height * screenSize.height
+        
+        // Approximate font size (font height is roughly 1.2x the point size)
+        let estimatedSize = pixelHeight / 1.2
+        
+        // Clamp to reasonable range
+        return min(max(estimatedSize, 8), 72)
     }
     
     // MARK: - Language Detection

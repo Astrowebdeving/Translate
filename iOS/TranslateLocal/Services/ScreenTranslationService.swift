@@ -30,6 +30,15 @@ class ScreenTranslationService {
     private(set) var lastCheckTime: Date?
     private(set) var fileExists: Bool = false
     
+    /// Current positioned translations for overlay display
+    private(set) var positionedTranslations: [PositionedTranslation] = []
+    
+    /// Whether overlay mode is enabled
+    private(set) var isOverlayEnabled = false
+    
+    /// Whether smart positioning with Gemma is enabled
+    var useSmartPositioning = true
+    
     // MARK: - Services
     
     private let pipService: PiPService
@@ -40,6 +49,14 @@ class ScreenTranslationService {
     var sourceLanguage: Language = .english
     var targetLanguage: Language = .japanese
     var processingInterval: TimeInterval = 1.0
+    var overlayOpacity: Float = 0.3
+    
+    // MARK: - Feature Availability
+    
+    /// Check if overlay feature is available (real device only)
+    var isOverlayFeatureAvailable: Bool {
+        return pipService.isOverlayFeatureAvailable
+    }
     
     // MARK: - Private Properties
     
@@ -86,6 +103,48 @@ class ScreenTranslationService {
     
     var pipFrameCount: Int {
         return pipService.frameCount
+    }
+    
+    #if targetEnvironment(simulator)
+    /// Start demo mode for simulator testing
+    func startDemoMode() {
+        pipService.startDemoMode()
+        addDebugLog("Demo mode started")
+    }
+    
+    /// Stop demo mode
+    func stopDemoMode() {
+        pipService.stopDemoMode()
+        addDebugLog("Demo mode stopped")
+    }
+    #endif
+    
+    // MARK: - Overlay Control
+    
+    /// Toggle overlay mode on/off
+    func toggleOverlay() {
+        isOverlayEnabled.toggle()
+        pipService.toggleOverlay()
+        
+        if isOverlayEnabled {
+            addDebugLog("Overlay enabled")
+            DebugLogger.screenTranslation("Overlay mode enabled", level: .info)
+        } else {
+            addDebugLog("Overlay disabled")
+            positionedTranslations = []
+            DebugLogger.screenTranslation("Overlay mode disabled", level: .info)
+        }
+    }
+    
+    /// Set overlay opacity
+    func setOverlayOpacity(_ opacity: Float) {
+        overlayOpacity = opacity
+        pipService.setOverlayOpacity(Double(opacity))
+    }
+    
+    /// Get current overlay mode
+    var overlayMode: OverlayMode {
+        return pipService.overlayMode
     }
     
     /// Start screen translation mode
@@ -317,7 +376,11 @@ class ScreenTranslationService {
     
     /// Translate the text blocks in a payload
     private func translatePayload(_ payload: ScreenPayload) async {
-        // Combine all text for translation
+        guard !payload.textBlocks.isEmpty else {
+            addDebugLog("No text blocks, skipping translation")
+            return
+        }
+        
         let textToTranslate = payload.fullText
         
         guard !textToTranslate.isEmpty else {
@@ -325,41 +388,63 @@ class ScreenTranslationService {
             return
         }
         
-        addDebugLog("Translating: \(truncate(textToTranslate, maxLength: 30))")
-        DebugLogger.screenTranslation("Translating text: \(truncate(textToTranslate, maxLength: 50))", level: .info)
+        addDebugLog("Translating \(payload.textBlocks.count) blocks: \(truncate(textToTranslate, maxLength: 30))")
+        DebugLogger.screenTranslation("Translating \(payload.textBlocks.count) text blocks", level: .info)
         
         // Show that we're translating
         pipService.updateContent("Translating...", originalText: truncate(textToTranslate, maxLength: 50))
         
         do {
-            let result = try await translationService.translate(
-                text: textToTranslate,
-                from: sourceLanguage,
-                to: targetLanguage
-            )
-            
-            // Check if task was cancelled
-            guard !Task.isCancelled else { return }
-            
-            addDebugLog("Translation done: \(truncate(result.translatedText, maxLength: 30))")
-            DebugLogger.screenTranslation("Translation complete", level: .success)
-            
-            // Update PiP with translation
-            pipService.updateContent(
-                result.translatedText,
-                originalText: truncate(textToTranslate, maxLength: 50)
-            )
-            
-            translatedBlockCount += 1
+            // Use positioned translation if overlay mode is enabled and Gemma is available
+            if isOverlayEnabled && useSmartPositioning {
+                // Smart positioning with Gemma
+                let positioned = try await translationService.translateWithPositioning(
+                    textBlocks: payload.textBlocks,
+                    from: sourceLanguage,
+                    to: targetLanguage,
+                    screenSize: payload.screenSize
+                )
+                
+                guard !Task.isCancelled else { return }
+                
+                positionedTranslations = positioned
+                pipService.updatePositionedTranslations(positioned)
+                
+                addDebugLog("Smart translation done: \(positioned.count) positioned blocks")
+                DebugLogger.screenTranslation("Smart positioning complete: \(positioned.count) blocks", level: .success)
+                
+                translatedBlockCount += positioned.count
+                
+            } else {
+                // Simple translation mode
+                let result = try await translationService.translate(
+                    text: textToTranslate,
+                    from: sourceLanguage,
+                    to: targetLanguage
+                )
+                
+                guard !Task.isCancelled else { return }
+                
+                addDebugLog("Translation done: \(truncate(result.translatedText, maxLength: 30))")
+                DebugLogger.screenTranslation("Translation complete", level: .success)
+                
+                // Update PiP with translation
+                pipService.updateContent(
+                    result.translatedText,
+                    originalText: truncate(textToTranslate, maxLength: 50)
+                )
+                
+                translatedBlockCount += 1
+            }
             
             // Create translation result for sharing
             let translations: [String: TranslatedBlock] = [
                 "main": TranslatedBlock(
                     originalText: textToTranslate,
-                    translatedText: result.translatedText,
+                    translatedText: positionedTranslations.map(\.translatedText).joined(separator: "\n"),
                     sourceLanguage: sourceLanguage.id,
                     targetLanguage: targetLanguage.id,
-                    confidence: result.confidence
+                    confidence: 0.9
                 )
             ]
             

@@ -8,6 +8,7 @@
 
 import Foundation
 import CoreML
+import ZIPFoundation
 
 // MARK: - Model Download Info
 
@@ -54,19 +55,20 @@ class CoreMLModelDownloader {
     private let modelsDirectory: URL
     private var downloadTask: URLSessionDownloadTask?
     
-    // Model registry URL - replace with your actual hosting URL
-    // Options: GitHub Releases, HuggingFace Hub, CloudFlare R2, AWS S3
-    private let registryURL = "https://huggingface.co/translatelocal/coreml-models/resolve/main/registry.json"
+    // HuggingFace dataset repo for CoreML models
+    private let huggingFaceRepo = "tu101/models_MLconverted"
     
-    // Alternative: Use GitHub Releases
-    // private let registryURL = "https://github.com/yourusername/translatelocal-models/releases/latest/download/registry.json"
+    // Model registry URL
+    private var registryURL: String {
+        "https://huggingface.co/datasets/\(huggingFaceRepo)/resolve/main/registry.json"
+    }
     
     // MARK: - Initialization
     
     init() {
-        // Set up models directory
+        // Set up models directory - Unified with ModelManager
         let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        modelsDirectory = appSupport.appendingPathComponent("TranslateLocal/CoreMLModels", isDirectory: true)
+        modelsDirectory = appSupport.appendingPathComponent("TranslateLocal/Models", isDirectory: true)
         
         try? fileManager.createDirectory(at: modelsDirectory, withIntermediateDirectories: true)
         
@@ -93,98 +95,181 @@ class CoreMLModelDownloader {
         }
     }
     
-    /// Load the built-in model registry (hardcoded models)
+    /// Load the built-in model registry (fallback when network unavailable)
+    /// Models hosted at: https://huggingface.co/datasets/tu101/models_MLconverted
     private func loadBuiltInRegistry() {
-        // These are the models we support - they need to be hosted somewhere
-        // The URLs below are placeholders - replace with actual hosting URLs
-        
-        let baseURL = "https://huggingface.co/translatelocal/coreml-models/resolve/main"
+        let baseURL = "https://huggingface.co/datasets/tu101/models_MLconverted/resolve/main"
         
         availableModels = [
-            // Spanish ↔ English (most requested)
-            DownloadableModel(
-                id: "opus-en-es",
-                name: "English → Spanish",
-                description: "Helsinki-NLP Opus-MT model for English to Spanish translation",
-                downloadURL: "\(baseURL)/OpusMT_en_es.mlpackage.zip",
-                sizeBytes: 150_000_000,
-                version: "1.0.0",
-                sourceLanguage: "en",
-                targetLanguage: "es",
-                modelType: "opus"
-            ),
-            DownloadableModel(
-                id: "opus-es-en",
-                name: "Spanish → English",
-                description: "Helsinki-NLP Opus-MT model for Spanish to English translation",
-                downloadURL: "\(baseURL)/OpusMT_es_en.mlpackage.zip",
-                sizeBytes: 150_000_000,
-                version: "1.0.0",
-                sourceLanguage: "es",
-                targetLanguage: "en",
-                modelType: "opus"
-            ),
-            
             // Chinese ↔ English
-            DownloadableModel(
-                id: "opus-en-zh",
-                name: "English → Chinese",
-                description: "Helsinki-NLP Opus-MT model for English to Chinese translation",
-                downloadURL: "\(baseURL)/OpusMT_en_zh.mlpackage.zip",
-                sizeBytes: 180_000_000,
-                version: "1.0.0",
-                sourceLanguage: "en",
-                targetLanguage: "zh",
-                modelType: "opus"
-            ),
             DownloadableModel(
                 id: "opus-zh-en",
                 name: "Chinese → English",
-                description: "Helsinki-NLP Opus-MT model for Chinese to English translation",
-                downloadURL: "\(baseURL)/OpusMT_zh_en.mlpackage.zip",
-                sizeBytes: 180_000_000,
+                description: "Helsinki-NLP Opus-MT model for zh-en translation",
+                downloadURL: "\(baseURL)/OpusMT_zh_en.zip",
+                sizeBytes: 205_296_859,
                 version: "1.0.0",
                 sourceLanguage: "zh",
                 targetLanguage: "en",
                 modelType: "opus"
             ),
+            DownloadableModel(
+                id: "opus-en-zh",
+                name: "English → Chinese",
+                description: "Helsinki-NLP Opus-MT model for en-zh translation",
+                downloadURL: "\(baseURL)/OpusMT_en_zh.zip",
+                sizeBytes: 205_838_546,
+                version: "1.0.0",
+                sourceLanguage: "en",
+                targetLanguage: "zh",
+                modelType: "opus"
+            ),
             
-            // Japanese ↔ English
+            // Japanese
             DownloadableModel(
                 id: "opus-en-ja",
                 name: "English → Japanese",
-                description: "Helsinki-NLP Opus-MT model for English to Japanese translation",
-                downloadURL: "\(baseURL)/OpusMT_en_ja.mlpackage.zip",
-                sizeBytes: 180_000_000,
+                description: "Helsinki-NLP Opus-MT model for en-ja translation",
+                downloadURL: "\(baseURL)/OpusMT_en_ja.zip",
+                sizeBytes: 169_436_284,
                 version: "1.0.0",
                 sourceLanguage: "en",
                 targetLanguage: "ja",
                 modelType: "opus"
             ),
+            
+            // Spanish ↔ English
             DownloadableModel(
-                id: "opus-ja-en",
-                name: "Japanese → English",
-                description: "Helsinki-NLP Opus-MT model for Japanese to English translation",
-                downloadURL: "\(baseURL)/OpusMT_ja_en.mlpackage.zip",
-                sizeBytes: 180_000_000,
+                id: "opus-es-en",
+                name: "Spanish → English",
+                description: "Helsinki-NLP Opus-MT model for es-en translation",
+                downloadURL: "\(baseURL)/OpusMT_es_en.zip",
+                sizeBytes: 204_796_283,
                 version: "1.0.0",
-                sourceLanguage: "ja",
+                sourceLanguage: "es",
                 targetLanguage: "en",
                 modelType: "opus"
             ),
-            
-            // Gemma 3n Multilingual
             DownloadableModel(
-                id: "gemma-3n-multilingual",
-                name: "Gemma 3n Multilingual",
-                description: "Google's Gemma 3n model - supports any language pair with context understanding",
-                downloadURL: "\(baseURL)/Gemma3nE2B.mlpackage.zip",
-                sizeBytes: 800_000_000,
+                id: "opus-en-es",
+                name: "English → Spanish",
+                description: "Helsinki-NLP Opus-MT model for en-es translation",
+                downloadURL: "\(baseURL)/OpusMT_en_es.zip",
+                sizeBytes: 205_293_000,
                 version: "1.0.0",
-                sourceLanguage: "*",
-                targetLanguage: "*",
-                modelType: "gemma"
-            )
+                sourceLanguage: "en",
+                targetLanguage: "es",
+                modelType: "opus"
+            ),
+            
+            // German ↔ English
+            DownloadableModel(
+                id: "opus-de-en",
+                name: "German → English",
+                description: "Helsinki-NLP Opus-MT model for de-en translation",
+                downloadURL: "\(baseURL)/OpusMT_de_en.zip",
+                sizeBytes: 191_192_950,
+                version: "1.0.0",
+                sourceLanguage: "de",
+                targetLanguage: "en",
+                modelType: "opus"
+            ),
+            DownloadableModel(
+                id: "opus-en-de",
+                name: "English → German",
+                description: "Helsinki-NLP Opus-MT model for en-de translation",
+                downloadURL: "\(baseURL)/OpusMT_en_de.zip",
+                sizeBytes: 191_378_939,
+                version: "1.0.0",
+                sourceLanguage: "en",
+                targetLanguage: "de",
+                modelType: "opus"
+            ),
+            
+            // French ↔ English
+            DownloadableModel(
+                id: "opus-fr-en",
+                name: "French → English",
+                description: "Helsinki-NLP Opus-MT model for fr-en translation",
+                downloadURL: "\(baseURL)/OpusMT_fr_en.zip",
+                sizeBytes: 194_426_148,
+                version: "1.0.0",
+                sourceLanguage: "fr",
+                targetLanguage: "en",
+                modelType: "opus"
+            ),
+            DownloadableModel(
+                id: "opus-en-fr",
+                name: "English → French",
+                description: "Helsinki-NLP Opus-MT model for en-fr translation",
+                downloadURL: "\(baseURL)/OpusMT_en_fr.zip",
+                sizeBytes: 194_811_935,
+                version: "1.0.0",
+                sourceLanguage: "en",
+                targetLanguage: "fr",
+                modelType: "opus"
+            ),
+            
+            // Russian ↔ English
+            DownloadableModel(
+                id: "opus-ru-en",
+                name: "Russian → English",
+                description: "Helsinki-NLP Opus-MT model for ru-en translation",
+                downloadURL: "\(baseURL)/OpusMT_ru_en.zip",
+                sizeBytes: 201_043_998,
+                version: "1.0.0",
+                sourceLanguage: "ru",
+                targetLanguage: "en",
+                modelType: "opus"
+            ),
+            DownloadableModel(
+                id: "opus-en-ru",
+                name: "English → Russian",
+                description: "Helsinki-NLP Opus-MT model for en-ru translation",
+                downloadURL: "\(baseURL)/OpusMT_en_ru.zip",
+                sizeBytes: 200_996_436,
+                version: "1.0.0",
+                sourceLanguage: "en",
+                targetLanguage: "ru",
+                modelType: "opus"
+            ),
+            
+            // Hindi ↔ English
+            DownloadableModel(
+                id: "opus-hi-en",
+                name: "Hindi → English",
+                description: "Helsinki-NLP Opus-MT model for hi-en translation",
+                downloadURL: "\(baseURL)/OpusMT_hi_en.zip",
+                sizeBytes: 197_834_980,
+                version: "1.0.0",
+                sourceLanguage: "hi",
+                targetLanguage: "en",
+                modelType: "opus"
+            ),
+            DownloadableModel(
+                id: "opus-en-hi",
+                name: "English → Hindi",
+                description: "Helsinki-NLP Opus-MT model for en-hi translation",
+                downloadURL: "\(baseURL)/OpusMT_en_hi.zip",
+                sizeBytes: 199_480_410,
+                version: "1.0.0",
+                sourceLanguage: "en",
+                targetLanguage: "hi",
+                modelType: "opus"
+            ),
+            
+            // Korean → English
+            DownloadableModel(
+                id: "opus-ko-en",
+                name: "Korean → English",
+                description: "Helsinki-NLP Opus-MT model for ko-en translation",
+                downloadURL: "\(baseURL)/OpusMT_ko_en.zip",
+                sizeBytes: 200_000_000,  // Estimated, update after conversion
+                version: "1.0.0",
+                sourceLanguage: "ko",
+                targetLanguage: "en",
+                modelType: "opus"
+            ),
         ]
     }
     
@@ -287,15 +372,17 @@ class CoreMLModelDownloader {
         // Remove existing if present
         try? fileManager.removeItem(at: destination)
         
-        // Use built-in unzip via Process (macOS) or third-party library
-        // For iOS, we'll use a simple approach
-        
-        // Create destination directory
+        // Ensure destination parent exists
         try fileManager.createDirectory(at: destination, withIntermediateDirectories: true)
         
-        // For iOS, you would use a library like ZIPFoundation
-        // For now, we'll assume the model is already in the correct format
-        try fileManager.moveItem(at: source, to: destination.appendingPathComponent("model.mlpackage"))
+        // Use ZIPFoundation to extract the model package
+        do {
+            try fileManager.unzipItem(at: source, to: destination)
+            print("Successfully unzipped model to \(destination.path)")
+        } catch {
+            print("Failed to unzip model: \(error)")
+            throw DownloadError.unzipFailed
+        }
     }
     
     /// Cancel the current download

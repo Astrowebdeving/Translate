@@ -127,20 +127,70 @@ struct ScreenTranslateView: View {
     
     #if targetEnvironment(simulator)
     private var simulatorWarning: some View {
-        HStack {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundColor(.yellow)
-            VStack(alignment: .leading) {
-                Text("Running on Simulator")
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundColor(.orange)
+                VStack(alignment: .leading) {
+                    Text("Simulator - Limited Functionality")
+                        .font(.caption.bold())
+                    Text("Screen Translation Overlay requires a real iPad device. Screen recording doesn't work on simulator.")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+            }
+            
+            Divider()
+            
+            // PiP demo button (for testing PiP window only)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("PiP Demo Mode")
                     .font(.caption.bold())
-                Text("Screen recording and PiP have limited functionality. Test on a real device for full features.")
-                    .font(.caption2)
                     .foregroundColor(.secondary)
+                
+                Button {
+                    testPiPOnSimulator()
+                } label: {
+                    HStack {
+                        Image(systemName: "play.rectangle")
+                        Text("Test PiP Window (Demo Only)")
+                    }
+                    .font(.caption.bold())
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(Color.gray)
+                    .cornerRadius(8)
+                }
             }
         }
         .padding()
-        .background(Color.yellow.opacity(0.1))
+        .background(Color.orange.opacity(0.1))
         .cornerRadius(12)
+    }
+    
+    private func testPiPOnSimulator() {
+        Task {
+            do {
+                // Initialize service if needed
+                if screenService == nil {
+                    initializeService()
+                }
+                
+                // Start the screen translation (which starts PiP)
+                try await screenService?.start()
+                
+                // Wait a moment for PiP to fully initialize, then start demo mode
+                try await Task.sleep(nanoseconds: 3_000_000_000) // 3 seconds
+                
+                // Start demo mode to show sample translations
+                screenService?.startDemoMode()
+                
+            } catch {
+                errorMessage = error.localizedDescription
+                showError = true
+            }
+        }
     }
     #endif
     
@@ -264,6 +314,11 @@ struct ScreenTranslateView: View {
                     .cornerRadius(14)
                 }
             } else {
+                // Overlay toggle (real device only)
+                #if !targetEnvironment(simulator)
+                overlayControlSection
+                #endif
+                
                 // Stop button
                 Button {
                     stopScreenTranslation()
@@ -287,6 +342,105 @@ struct ScreenTranslateView: View {
             }
         }
     }
+    
+    #if !targetEnvironment(simulator)
+    private var overlayControlSection: some View {
+        VStack(spacing: 12) {
+            // Overlay mode toggle
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Translation Overlay")
+                        .font(.subheadline.bold())
+                    Text(screenService?.isOverlayEnabled == true ? "Full-screen overlay active" : "Toggle button mode")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                Spacer()
+                
+                Button {
+                    screenService?.toggleOverlay()
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: screenService?.isOverlayEnabled == true ? "rectangle.on.rectangle.slash" : "rectangle.on.rectangle")
+                        Text(screenService?.isOverlayEnabled == true ? "Disable" : "Enable")
+                    }
+                    .font(.caption.bold())
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(screenService?.isOverlayEnabled == true ? Color.orange : Color.indigo)
+                    .cornerRadius(8)
+                }
+            }
+            .padding()
+            .background(Color(.secondarySystemBackground))
+            .cornerRadius(12)
+            
+            // Overlay settings (when enabled)
+            if screenService?.isOverlayEnabled == true {
+                overlaySettingsSection
+            }
+        }
+    }
+    
+    private var overlaySettingsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Overlay Settings")
+                .font(.caption.bold())
+                .foregroundColor(.secondary)
+            
+            // Opacity slider
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text("Background Opacity")
+                        .font(.caption)
+                    Spacer()
+                    Text("\(Int((screenService?.overlayOpacity ?? 0.3) * 100))%")
+                        .font(.caption.bold())
+                }
+                
+                Slider(
+                    value: Binding(
+                        get: { Double(screenService?.overlayOpacity ?? 0.3) },
+                        set: { screenService?.setOverlayOpacity(Float($0)) }
+                    ),
+                    in: 0.1...0.8
+                )
+                .tint(.indigo)
+            }
+            
+            // Smart positioning toggle
+            Toggle(isOn: Binding(
+                get: { screenService?.useSmartPositioning ?? true },
+                set: { screenService?.useSmartPositioning = $0 }
+            )) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Smart Positioning (Gemma)")
+                        .font(.caption)
+                    Text("Use AI to adjust translation positions")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+            }
+            .toggleStyle(SwitchToggleStyle(tint: .indigo))
+            
+            // Positioned translations count
+            if let count = screenService?.positionedTranslations.count, count > 0 {
+                HStack {
+                    Image(systemName: "text.viewfinder")
+                        .foregroundColor(.green)
+                    Text("\(count) text blocks positioned")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+        }
+        .padding()
+        .background(Color(.tertiarySystemBackground))
+        .cornerRadius(12)
+    }
+    #endif
     
     private var statisticsSection: some View {
         VStack(spacing: 12) {
@@ -325,9 +479,11 @@ struct ScreenTranslateView: View {
             
             Group {
                 debugRow("PiP Status", value: screenService?.pipStatus ?? "N/A")
+                debugRow("Overlay Mode", value: overlayModeText)
                 debugRow("Broadcast", value: broadcastStatusText)
                 debugRow("File Exists", value: (screenService?.fileExists ?? false) ? "Yes" : "No")
                 debugRow("Last Check", value: screenService?.lastCheckTime.map { formatTime($0) } ?? "Never")
+                debugRow("Positioned Blocks", value: "\(screenService?.positionedTranslations.count ?? 0)")
             }
             
             if let log = screenService?.debugLog, !log.isEmpty {
@@ -433,6 +589,16 @@ struct ScreenTranslateView: View {
         }
     }
     
+    private var overlayModeText: String {
+        guard let service = screenService else { return "-" }
+        
+        if service.isOverlayEnabled {
+            return "Full Overlay"
+        } else {
+            return "Toggle Button"
+        }
+    }
+    
     // MARK: - Actions
     
     private func initializeService() {
@@ -460,6 +626,9 @@ struct ScreenTranslateView: View {
     }
     
     private func stopScreenTranslation() {
+        #if targetEnvironment(simulator)
+        screenService?.stopDemoMode()
+        #endif
         screenService?.stop()
     }
 }

@@ -720,6 +720,304 @@ class TranslationService {
         return "[Demo Mode] No AI models installed. Download models from the Translate tab to enable real translation.\n\nOriginal: \(text)"
     }
     
+    // MARK: - Smart Positioning Translation (Gemma 3n E2B)
+    
+    /// Translate text blocks with smart positioning for overlay display
+    /// Uses Gemma 3n E2B to understand UI context and adjust translations
+    func translateWithPositioning(
+        textBlocks: [ScreenTextBlock],
+        from sourceLanguage: Language,
+        to targetLanguage: Language,
+        screenSize: CGSize
+    ) async throws -> [PositionedTranslation] {
+        
+        guard !textBlocks.isEmpty else {
+            return []
+        }
+        
+        isProcessing = true
+        error = nil
+        
+        do {
+            // Check if Gemma is available
+            let useGemma = isModelAvailable(.gemma3n)
+            
+            if useGemma {
+                // Try smart translation with Gemma
+                let result = try await performGemmaPositionedTranslation(
+                    textBlocks: textBlocks,
+                    from: sourceLanguage,
+                    to: targetLanguage,
+                    screenSize: screenSize
+                )
+                isProcessing = false
+                return result
+            } else {
+                // Fallback to simple translation without smart positioning
+                let result = try await performSimplePositionedTranslation(
+                    textBlocks: textBlocks,
+                    from: sourceLanguage,
+                    to: targetLanguage
+                )
+                isProcessing = false
+                return result
+            }
+            
+        } catch {
+            isProcessing = false
+            throw error
+        }
+    }
+    
+    /// Perform translation with Gemma 3n for smart UI understanding
+    private func performGemmaPositionedTranslation(
+        textBlocks: [ScreenTextBlock],
+        from sourceLanguage: Language,
+        to targetLanguage: Language,
+        screenSize: CGSize
+    ) async throws -> [PositionedTranslation] {
+        
+        // Build the prompt for Gemma
+        let prompt = buildPositioningPrompt(
+            textBlocks: textBlocks,
+            from: sourceLanguage,
+            to: targetLanguage,
+            screenSize: screenSize
+        )
+        
+        // Try to load Gemma if not already loaded
+        if !loadedModels.contains(.gemma3n) {
+            try await loadModel(.gemma3n)
+        }
+        
+        guard let model = models[.gemma3n] else {
+            throw TranslationError.modelNotLoaded("Gemma 3n E2B")
+        }
+        
+        // Run inference
+        let config = self.configuration
+        let responseText = try await withTimeout(15.0) { [self] in
+            try await withCheckedThrowingContinuation { continuation in
+                self.processingQueue.async {
+                    do {
+                        let result = try self.runGemmaInference(
+                            model: model,
+                            text: prompt,
+                            targetLanguage: targetLanguage,
+                            configuration: config
+                        )
+                        continuation.resume(returning: result)
+                    } catch {
+                        continuation.resume(throwing: error)
+                    }
+                }
+            }
+        }
+        
+        // Parse Gemma's JSON response
+        let positionedTranslations = parseGemmaPositioningResponse(
+            response: responseText,
+            originalBlocks: textBlocks,
+            sourceLanguage: sourceLanguage,
+            targetLanguage: targetLanguage
+        )
+        
+        return positionedTranslations
+    }
+    
+    /// Build prompt for Gemma positioning translation
+    private func buildPositioningPrompt(
+        textBlocks: [ScreenTextBlock],
+        from sourceLanguage: Language,
+        to targetLanguage: Language,
+        screenSize: CGSize
+    ) -> String {
+        var prompt = """
+        You are a UI translator. Translate the following text blocks from \(sourceLanguage.name) to \(targetLanguage.name).
+        For each block, provide the translation and adjust the position if the translation is significantly longer or shorter.
+        
+        Screen size: \(Int(screenSize.width))x\(Int(screenSize.height))
+        
+        Text blocks:
+        
+        """
+        
+        for (index, block) in textBlocks.enumerated() {
+            let box = block.boundingBox
+            prompt += """
+            \(index + 1). "\(block.text)"
+               Position: x=\(String(format: "%.3f", box.minX)), y=\(String(format: "%.3f", box.minY)), w=\(String(format: "%.3f", box.width)), h=\(String(format: "%.3f", box.height))
+               Type: \(block.blockType.rawValue)
+               Confidence: \(String(format: "%.2f", block.confidence))
+            
+            """
+        }
+        
+        prompt += """
+        
+        Respond with a JSON array. For each block:
+        {
+          "index": <block number>,
+          "translation": "<translated text>",
+          "type": "header|body|button|label|navigation|unknown",
+          "adjusted_x": <0-1>,
+          "adjusted_y": <0-1>,
+          "adjusted_w": <0-1>,
+          "adjusted_h": <0-1>,
+          "font_scale": <0.5-2.0>
+        }
+        
+        JSON output only, no explanation:
+        """
+        
+        return prompt
+    }
+    
+    /// Parse Gemma's JSON response into PositionedTranslations
+    private func parseGemmaPositioningResponse(
+        response: String,
+        originalBlocks: [ScreenTextBlock],
+        sourceLanguage: Language,
+        targetLanguage: Language
+    ) -> [PositionedTranslation] {
+        
+        var results: [PositionedTranslation] = []
+        
+        // Try to extract JSON from response
+        let jsonString = extractJSON(from: response)
+        
+        guard let data = jsonString.data(using: .utf8) else {
+            // Fallback: return original blocks with empty translations
+            return createFallbackTranslations(
+                blocks: originalBlocks,
+                sourceLanguage: sourceLanguage,
+                targetLanguage: targetLanguage
+            )
+        }
+        
+        do {
+            if let jsonArray = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
+                for item in jsonArray {
+                    guard let index = item["index"] as? Int,
+                          let translation = item["translation"] as? String,
+                          index > 0 && index <= originalBlocks.count else {
+                        continue
+                    }
+                    
+                    let block = originalBlocks[index - 1]
+                    
+                    // Parse adjusted position
+                    let adjustedRect = CGRect(
+                        x: item["adjusted_x"] as? CGFloat ?? block.boundingBox.minX,
+                        y: item["adjusted_y"] as? CGFloat ?? block.boundingBox.minY,
+                        width: item["adjusted_w"] as? CGFloat ?? block.boundingBox.width,
+                        height: item["adjusted_h"] as? CGFloat ?? block.boundingBox.height
+                    )
+                    
+                    let fontScale = item["font_scale"] as? CGFloat ?? 1.0
+                    let typeString = item["type"] as? String ?? block.blockType.rawValue
+                    let blockType = TextBlockType(rawValue: typeString) ?? block.blockType
+                    
+                    let positioned = PositionedTranslation(
+                        originalText: block.text,
+                        translatedText: translation,
+                        blockType: blockType,
+                        originalRect: block.boundingBox,
+                        adjustedRect: adjustedRect,
+                        fontScale: fontScale,
+                        sourceLanguage: sourceLanguage.id,
+                        targetLanguage: targetLanguage.id
+                    )
+                    
+                    results.append(positioned)
+                }
+            }
+        } catch {
+            // JSON parsing failed, use fallback
+            return createFallbackTranslations(
+                blocks: originalBlocks,
+                sourceLanguage: sourceLanguage,
+                targetLanguage: targetLanguage
+            )
+        }
+        
+        // If we got fewer results than blocks, fill in missing ones
+        if results.count < originalBlocks.count {
+            let missing = createFallbackTranslations(
+                blocks: Array(originalBlocks[results.count...]),
+                sourceLanguage: sourceLanguage,
+                targetLanguage: targetLanguage
+            )
+            results.append(contentsOf: missing)
+        }
+        
+        return results
+    }
+    
+    /// Extract JSON from a response that might contain extra text
+    private func extractJSON(from text: String) -> String {
+        // Find the first '[' and last ']'
+        guard let start = text.firstIndex(of: "["),
+              let end = text.lastIndex(of: "]") else {
+            return "[]"
+        }
+        return String(text[start...end])
+    }
+    
+    /// Create fallback translations when Gemma parsing fails
+    private func createFallbackTranslations(
+        blocks: [ScreenTextBlock],
+        sourceLanguage: Language,
+        targetLanguage: Language
+    ) -> [PositionedTranslation] {
+        return blocks.map { block in
+            PositionedTranslation(
+                originalText: block.text,
+                translatedText: "[Translation pending]",
+                blockType: block.blockType,
+                originalRect: block.boundingBox,
+                adjustedRect: nil,
+                fontScale: block.blockType.suggestedFontScale,
+                sourceLanguage: sourceLanguage.id,
+                targetLanguage: targetLanguage.id
+            )
+        }
+    }
+    
+    /// Simple positioned translation without Gemma (fallback)
+    private func performSimplePositionedTranslation(
+        textBlocks: [ScreenTextBlock],
+        from sourceLanguage: Language,
+        to targetLanguage: Language
+    ) async throws -> [PositionedTranslation] {
+        
+        var results: [PositionedTranslation] = []
+        
+        for block in textBlocks {
+            // Translate each block individually
+            let translationResult = try await translate(
+                text: block.text,
+                from: sourceLanguage,
+                to: targetLanguage
+            )
+            
+            let positioned = PositionedTranslation(
+                originalText: block.text,
+                translatedText: translationResult.translatedText,
+                blockType: block.blockType,
+                originalRect: block.boundingBox,
+                adjustedRect: nil, // Use original position
+                fontScale: block.blockType.suggestedFontScale,
+                sourceLanguage: sourceLanguage.id,
+                targetLanguage: targetLanguage.id
+            )
+            
+            results.append(positioned)
+        }
+        
+        return results
+    }
+    
     // MARK: - Language Detection
     
     private func detectLanguage(_ text: String) -> Language {

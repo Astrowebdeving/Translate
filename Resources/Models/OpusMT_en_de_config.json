@@ -1,0 +1,8 @@
+{
+  "model_name": "OpusMT_en_de",
+  "vocab_size": 58101,
+  "pad_token_id": 58100,
+  "eos_token_id": 0,
+  "decoder_start_token_id": 58100,
+  "max_length": 512
+}

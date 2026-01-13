@@ -31,13 +31,14 @@ except ImportError as e:
     print("Install with: pip install -r requirements.txt")
     sys.exit(1)
 
-# Model mappings
+# Model mappings (HuggingFace model IDs)
+# These are used as fallback if local raw_models/ folder doesn't exist
 OPUS_MODELS = {
     # English ↔ Spanish
     "en-es": "Helsinki-NLP/opus-mt-en-es",
     "es-en": "Helsinki-NLP/opus-mt-es-en",
     
-    # English ↔ Japanese
+    # English ↔ Japanese (note: HF uses "jap" not "ja")
     "en-ja": "Helsinki-NLP/opus-mt-en-jap",
     "ja-en": "Helsinki-NLP/opus-mt-jap-en",
     
@@ -53,8 +54,7 @@ OPUS_MODELS = {
     "en-de": "Helsinki-NLP/opus-mt-en-de",
     "de-en": "Helsinki-NLP/opus-mt-de-en",
     
-    # English ↔ Korean
-    "en-ko": "Helsinki-NLP/opus-mt-en-ko",
+    # Korean → English (standard model)
     "ko-en": "Helsinki-NLP/opus-mt-ko-en",
     
     # English ↔ Italian
@@ -63,7 +63,7 @@ OPUS_MODELS = {
     
     # English ↔ Portuguese
     "en-pt": "Helsinki-NLP/opus-mt-en-pt",
-    "pt-en": "Helsinki-NLP/opus-mt-ROMANCE-en",  # Uses ROMANCE group
+    "pt-en": "Helsinki-NLP/opus-mt-ROMANCE-en",
     
     # English ↔ Russian
     "en-ru": "Helsinki-NLP/opus-mt-en-ru",
@@ -72,6 +72,10 @@ OPUS_MODELS = {
     # English ↔ Arabic
     "en-ar": "Helsinki-NLP/opus-mt-en-ar",
     "ar-en": "Helsinki-NLP/opus-mt-ar-en",
+    
+    # English ↔ Hindi
+    "en-hi": "Helsinki-NLP/opus-mt-en-hi",
+    "hi-en": "Helsinki-NLP/opus-mt-hi-en",
 }
 
 # Bundle these models by default
@@ -86,10 +90,18 @@ class OpusModelConverter:
         self.tokenizer = None
         
     def load_model(self):
-        """Load the model and tokenizer from HuggingFace."""
-        print(f"📥 Loading {self.hf_model_id}...")
-        self.tokenizer = MarianTokenizer.from_pretrained(self.hf_model_id)
-        self.model = MarianMTModel.from_pretrained(self.hf_model_id)
+        """Load the model and tokenizer (prefers local path if available)."""
+        # Check if a local version exists in raw_models
+        local_path = Path("raw_models") / self.model_name
+        load_path = str(local_path) if local_path.exists() else self.hf_model_id
+        
+        if local_path.exists():
+            print(f"📂 Found local model at {local_path}. Using local files.")
+        else:
+            print(f"📥 Loading from HuggingFace: {self.hf_model_id}...")
+            
+        self.tokenizer = MarianTokenizer.from_pretrained(load_path)
+        self.model = MarianMTModel.from_pretrained(load_path)
         self.model.eval()
         print(f"✅ Model loaded successfully")
         
@@ -166,6 +178,14 @@ class OpusModelConverter:
         
         model_output_name = f"OpusMT_{self.model_name.replace('-', '_')}"
         
+        # Set compute precision based on quantize parameter
+        if quantize == "float16":
+            compute_precision = ct.precision.FLOAT16
+            print("📊 Using FLOAT16 precision for smaller model size")
+        else:
+            compute_precision = ct.precision.FLOAT32
+            print("📊 Using FLOAT32 precision")
+        
         # Convert encoder
         print("🔄 Converting encoder to Core ML...")
         traced_encoder = self.trace_encoder()
@@ -181,15 +201,9 @@ class OpusModelConverter:
             outputs=[ct.TensorType(name="encoder_hidden_states")],
             minimum_deployment_target=ct.target.iOS17,
             convert_to="mlprogram",
+            compute_precision=compute_precision,
+            compute_units=ct.ComputeUnit.ALL,
         )
-        
-        # Quantize if requested
-        if quantize == "float16":
-            encoder_coreml = ct.compression_utils.affine_quantize_weights(
-                encoder_coreml,
-                mode="linear_symmetric",
-                dtype=np.float16
-            )
         
         encoder_path = output_path / f"{model_output_name}_encoder.mlpackage"
         encoder_coreml.save(str(encoder_path))
@@ -211,14 +225,9 @@ class OpusModelConverter:
             outputs=[ct.TensorType(name="logits")],
             minimum_deployment_target=ct.target.iOS17,
             convert_to="mlprogram",
+            compute_precision=compute_precision,
+            compute_units=ct.ComputeUnit.ALL,
         )
-        
-        if quantize == "float16":
-            decoder_coreml = ct.compression_utils.affine_quantize_weights(
-                decoder_coreml,
-                mode="linear_symmetric",
-                dtype=np.float16
-            )
         
         decoder_path = output_path / f"{model_output_name}_decoder.mlpackage"
         decoder_coreml.save(str(decoder_path))

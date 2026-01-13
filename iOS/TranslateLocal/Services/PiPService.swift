@@ -25,11 +25,38 @@ class PiPService: NSObject {
     private(set) var frameCount: Int = 0
     private(set) var statusMessage: String = "Not started"
     
+    /// Current overlay mode (toggle button vs full overlay)
+    private(set) var overlayMode: OverlayMode = .toggle
+    
+    /// Whether translation overlay is enabled (controlled by toggle)
+    private(set) var isTranslationEnabled = false
+    
+    /// Current positioned translations for overlay display
+    private(set) var positionedTranslations: [PositionedTranslation] = []
+    
+    /// Overlay opacity (0-1)
+    var overlayOpacity: Double = 0.3
+    
+    // MARK: - Device Capability
+    
+    /// Check if the full overlay feature is available (real device only)
+    var isOverlayFeatureAvailable: Bool {
+        #if targetEnvironment(simulator)
+        // Screen recording doesn't work on simulator, so overlay feature is not useful
+        return false
+        #else
+        return isPiPSupported && UIDevice.current.userInterfaceIdiom == .pad
+        #endif
+    }
+    
     // MARK: - Private Properties
     
     private var pipController: AVPictureInPictureController?
     private var pipContentViewController: PiPContentViewController?
     private var sampleBufferDisplayLayer: AVSampleBufferDisplayLayer?
+    
+    /// Source view that hosts the display layer (must be in view hierarchy for PiP to work)
+    private var sourceView: UIView?
     
     /// Audio session for keeping app alive in background
     private let audioSession = AVAudioSession.sharedInstance()
@@ -38,7 +65,7 @@ class PiPService: NSObject {
     private var updateTimer: Timer?
     
     /// Refresh rate for PiP content (frames per second)
-    private let refreshRate: TimeInterval = 1.0 / 5.0  // 5 FPS (reduced for stability)
+    private var refreshRate: TimeInterval = 1.0 / 5.0  // 5 FPS default
     
     /// Content renderer
     private var contentRenderer: PiPContentRenderer?
@@ -55,11 +82,22 @@ class PiPService: NSObject {
     
     /// Check if PiP is supported on this device
     func checkPiPSupport() {
-        isPiPSupported = AVPictureInPictureController.isPictureInPictureSupported()
-        DebugLogger.pip("PiP supported: \(isPiPSupported)", level: isPiPSupported ? .success : .warning)
+        let systemSupported = AVPictureInPictureController.isPictureInPictureSupported()
         
         #if targetEnvironment(simulator)
-        DebugLogger.pip("Running on Simulator - PiP may have limited functionality", level: .warning)
+        // On iPad Simulator, PiP is supported even though isPictureInPictureSupported() may return false
+        let isIPad = UIDevice.current.userInterfaceIdiom == .pad
+        if isIPad {
+            isPiPSupported = true
+            DebugLogger.pip("iPad Simulator detected - PiP should work (system reports: \(systemSupported))", level: .info)
+        } else {
+            isPiPSupported = false
+            DebugLogger.pip("iPhone Simulator - PiP is not supported", level: .warning)
+        }
+        DebugLogger.pip("Running on Simulator - Screen recording will not work, but PiP window will display", level: .warning)
+        #else
+        isPiPSupported = systemSupported
+        DebugLogger.pip("PiP supported: \(isPiPSupported)", level: isPiPSupported ? .success : .warning)
         #endif
     }
     
@@ -99,10 +137,18 @@ class PiPService: NSObject {
         
         stopUpdateTimer()
         
+        #if targetEnvironment(simulator)
+        stopDemoMode()
+        #endif
+        
         pipController?.stopPictureInPicture()
         pipController = nil
         pipContentViewController = nil
         sampleBufferDisplayLayer = nil
+        
+        // Clean up source view
+        sourceView?.removeFromSuperview()
+        sourceView = nil
         
         isPiPActive = false
         statusMessage = "Stopped"
@@ -133,6 +179,103 @@ class PiPService: NSObject {
         DebugLogger.pip("Error state: \(message)", level: .error)
     }
     
+    // MARK: - Overlay Mode Control
+    
+    /// Toggle translation overlay on/off
+    func toggleOverlay() {
+        isTranslationEnabled.toggle()
+        
+        if isTranslationEnabled {
+            overlayMode = .fullOverlay
+            refreshRate = 1.0 / 2.0  // 2 FPS for full overlay (battery saving)
+            statusMessage = "Overlay Active"
+            DebugLogger.pip("Overlay enabled - switching to full overlay mode", level: .info)
+        } else {
+            overlayMode = .toggle
+            refreshRate = 1.0 / 5.0  // 5 FPS for toggle button
+            statusMessage = "Overlay Disabled"
+            DebugLogger.pip("Overlay disabled - switching to toggle mode", level: .info)
+        }
+        
+        // Update renderer with new mode
+        contentRenderer?.setMode(overlayMode, isEnabled: isTranslationEnabled)
+        
+        // Restart update timer with new refresh rate
+        if isPiPActive {
+            startUpdateTimer()
+        }
+    }
+    
+    /// Set overlay mode directly
+    func setOverlayMode(_ mode: OverlayMode) {
+        overlayMode = mode
+        isTranslationEnabled = (mode == .fullOverlay)
+        contentRenderer?.setMode(mode, isEnabled: isTranslationEnabled)
+        DebugLogger.pip("Overlay mode set to: \(mode)", level: .debug)
+    }
+    
+    /// Update positioned translations for overlay display
+    func updatePositionedTranslations(_ translations: [PositionedTranslation]) {
+        positionedTranslations = translations
+        contentRenderer?.updatePositionedTranslations(translations)
+        
+        if !translations.isEmpty {
+            statusMessage = "Translating \(translations.count) blocks"
+        }
+        
+        DebugLogger.pip("Updated \(translations.count) positioned translations", level: .debug)
+    }
+    
+    /// Set overlay opacity
+    func setOverlayOpacity(_ opacity: Double) {
+        overlayOpacity = min(max(opacity, 0), 1)
+        contentRenderer?.setOverlayOpacity(overlayOpacity)
+    }
+    
+    /// Demo mode for testing PiP on simulator
+    /// This cycles through sample translations to verify PiP is working
+    #if targetEnvironment(simulator)
+    private var demoTimer: Timer?
+    private var demoIndex = 0
+    private let demoTranslations = [
+        ("Hello, World!", "こんにちは、世界！"),
+        ("Welcome to TranslateLocal", "TranslateLocalへようこそ"),
+        ("Screen translation is amazing", "画面翻訳は素晴らしいです"),
+        ("This is running in PiP mode", "これはPiPモードで動作しています"),
+        ("No network required!", "ネットワーク不要！")
+    ]
+    
+    /// Start demo mode with sample translations (simulator only)
+    func startDemoMode() {
+        DebugLogger.pip("Starting demo mode for simulator testing", level: .info)
+        statusMessage = "Demo Mode Active"
+        
+        // Show first translation immediately
+        showDemoTranslation()
+        
+        // Cycle through translations every 3 seconds
+        demoTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.showDemoTranslation()
+            }
+        }
+    }
+    
+    /// Stop demo mode
+    func stopDemoMode() {
+        demoTimer?.invalidate()
+        demoTimer = nil
+        demoIndex = 0
+        DebugLogger.pip("Demo mode stopped", level: .info)
+    }
+    
+    private func showDemoTranslation() {
+        let (original, translated) = demoTranslations[demoIndex]
+        updateContent(translated, originalText: original)
+        demoIndex = (demoIndex + 1) % demoTranslations.count
+    }
+    #endif
+    
     // MARK: - Private Methods
     
     private func configureAudioSession() throws {
@@ -147,8 +290,14 @@ class PiPService: NSObject {
             try audioSession.setActive(true)
             DebugLogger.pip("Audio session active", level: .success)
         } catch {
+            #if targetEnvironment(simulator)
+            // Audio session may fail on simulator but PiP can still work
+            DebugLogger.pip("Audio session error (expected on simulator): \(error)", level: .warning)
+            // Don't throw on simulator - continue anyway
+            #else
             DebugLogger.pip("Audio session error: \(error)", level: .error)
             throw PiPError.audioSessionFailed(error.localizedDescription)
+            #endif
         }
     }
     
@@ -159,16 +308,40 @@ class PiPService: NSObject {
         let displayLayer = AVSampleBufferDisplayLayer()
         displayLayer.videoGravity = .resizeAspect
         displayLayer.backgroundColor = UIColor.black.cgColor
+        displayLayer.frame = CGRect(x: 0, y: 0, width: 480, height: 270)
         self.sampleBufferDisplayLayer = displayLayer
         DebugLogger.pip("Display layer created", level: .debug)
+        
+        // CRITICAL: The display layer MUST be added to a visible view hierarchy for PiP to work
+        // Create a source view and add it to the key window
+        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let keyWindow = windowScene.windows.first(where: { $0.isKeyWindow }) else {
+            DebugLogger.pip("Could not find key window!", level: .error)
+            return
+        }
+        
+        // Create a small source view (it will be hidden but must be in hierarchy)
+        let source = UIView(frame: CGRect(x: 0, y: 0, width: 480, height: 270))
+        source.backgroundColor = .clear
+        source.layer.addSublayer(displayLayer)
+        displayLayer.frame = source.bounds
+        
+        // Add to window at a position that won't interfere with UI
+        // The view needs to be "visible" (not hidden, alpha > 0) but can be off-screen or tiny
+        source.frame = CGRect(x: -1, y: -1, width: 1, height: 1)  // 1x1 pixel off-screen
+        source.clipsToBounds = true
+        keyWindow.addSubview(source)
+        self.sourceView = source
+        DebugLogger.pip("Source view added to window hierarchy", level: .success)
         
         // Create content renderer
         contentRenderer = PiPContentRenderer(displayLayer: displayLayer)
         DebugLogger.pip("Content renderer created", level: .debug)
         
-        // Render an initial frame
+        // Render an initial frame BEFORE creating the controller
         contentRenderer?.showWaiting()
         contentRenderer?.renderFrame()
+        DebugLogger.pip("Initial frame rendered", level: .debug)
         
         // Create the content source
         let contentSource = AVPictureInPictureController.ContentSource(
@@ -181,27 +354,67 @@ class PiPService: NSObject {
         pipController = AVPictureInPictureController(contentSource: contentSource)
         pipController?.delegate = self
         
-        if pipController == nil {
-            DebugLogger.pip("Failed to create PiP controller!", level: .error)
-        } else {
-            DebugLogger.pip("PiP controller created", level: .success)
+        // Disable automatic PiP to have full control
+        if #available(iOS 14.2, *) {
+            pipController?.canStartPictureInPictureAutomaticallyFromInline = true
         }
         
-        // Attempt to start PiP after a delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-            guard let self = self, let controller = self.pipController else {
-                DebugLogger.pip("PiP controller nil when trying to start", level: .error)
-                return
-            }
+        if pipController == nil {
+            DebugLogger.pip("Failed to create PiP controller!", level: .error)
+            statusMessage = "Failed to create PiP controller"
+        } else {
+            DebugLogger.pip("PiP controller created successfully", level: .success)
+        }
+        
+        // Attempt to start PiP after a delay to allow setup to complete
+        #if targetEnvironment(simulator)
+        let startDelay: TimeInterval = 2.0  // Longer delay for simulator
+        #else
+        let startDelay: TimeInterval = 1.0
+        #endif
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + startDelay) { [weak self] in
+            self?.attemptToStartPiP()
+        }
+    }
+    
+    private func attemptToStartPiP() {
+        guard let controller = self.pipController else {
+            DebugLogger.pip("PiP controller nil when trying to start", level: .error)
+            statusMessage = "PiP controller not available"
+            return
+        }
+        
+        DebugLogger.pip("Attempting to start PiP window...", level: .info)
+        DebugLogger.pip("isPictureInPicturePossible: \(controller.isPictureInPicturePossible)", level: .debug)
+        DebugLogger.pip("isPictureInPictureActive: \(controller.isPictureInPictureActive)", level: .debug)
+        
+        if controller.isPictureInPicturePossible {
+            controller.startPictureInPicture()
+            DebugLogger.pip("startPictureInPicture() called", level: .info)
+        } else {
+            DebugLogger.pip("PiP not possible yet, will retry...", level: .warning)
+            statusMessage = "PiP initializing..."
             
-            DebugLogger.pip("Attempting to start PiP window...", level: .info)
-            
-            if controller.isPictureInPicturePossible {
-                controller.startPictureInPicture()
-                DebugLogger.pip("startPictureInPicture() called", level: .info)
-            } else {
-                DebugLogger.pip("PiP not possible at this time", level: .warning)
-                self.statusMessage = "PiP not possible - try again"
+            // Retry after a short delay
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                guard let self = self, let controller = self.pipController else { return }
+                
+                DebugLogger.pip("Retry: isPictureInPicturePossible: \(controller.isPictureInPicturePossible)", level: .debug)
+                
+                if controller.isPictureInPicturePossible {
+                    controller.startPictureInPicture()
+                    DebugLogger.pip("startPictureInPicture() called on retry", level: .info)
+                } else {
+                    #if targetEnvironment(simulator)
+                    // On simulator, force try anyway
+                    controller.startPictureInPicture()
+                    DebugLogger.pip("Force starting PiP on simulator", level: .warning)
+                    #else
+                    DebugLogger.pip("PiP still not possible after retry", level: .error)
+                    self.statusMessage = "PiP not available"
+                    #endif
+                }
             }
         }
     }
@@ -293,44 +506,103 @@ extension PiPService: AVPictureInPictureSampleBufferPlaybackDelegate {
 // MARK: - PiP Content Renderer
 
 /// Renders translation content to CMSampleBuffers for PiP display
+/// Supports both toggle mode (small button) and full overlay mode
 class PiPContentRenderer {
     
     private let displayLayer: AVSampleBufferDisplayLayer
     private var currentView: PiPOverlayView
     private var hostingController: UIHostingController<PiPOverlayView>?
     
-    /// Size of the rendered content
-    private let renderSize = CGSize(width: 480, height: 270)  // 16:9 aspect ratio
+    /// Current overlay mode
+    private var overlayMode: OverlayMode = .toggle
+    
+    /// Whether translation is enabled
+    private var isTranslationEnabled = false
+    
+    /// Current positioned translations
+    private var positionedTranslations: [PositionedTranslation] = []
+    
+    /// Overlay opacity
+    private var overlayOpacity: Double = 0.3
+    
+    /// Current display status
+    private var status: PiPDisplayStatus = .waiting
+    
+    /// Size of the rendered content (changes based on mode)
+    private var renderSize: CGSize {
+        overlayMode.size
+    }
     
     init(displayLayer: AVSampleBufferDisplayLayer) {
         self.displayLayer = displayLayer
-        self.currentView = PiPOverlayView()
+        self.currentView = PiPOverlayView(mode: .toggle, status: .inactive)
     }
     
-    /// Update the translation content
+    /// Set the overlay mode
+    func setMode(_ mode: OverlayMode, isEnabled: Bool) {
+        overlayMode = mode
+        isTranslationEnabled = isEnabled
+        status = isEnabled ? .translating : .inactive
+        
+        // Recreate hosting controller with new size
+        hostingController = nil
+        updateCurrentView()
+    }
+    
+    /// Update positioned translations
+    func updatePositionedTranslations(_ translations: [PositionedTranslation]) {
+        positionedTranslations = translations
+        status = translations.isEmpty ? .waiting : .translating
+        updateCurrentView()
+    }
+    
+    /// Set overlay opacity
+    func setOverlayOpacity(_ opacity: Double) {
+        overlayOpacity = opacity
+        updateCurrentView()
+    }
+    
+    /// Update the translation content (legacy simple mode)
     func update(translation: String, originalText: String? = nil) {
+        status = .translating
         currentView = PiPOverlayView(
+            mode: overlayMode,
+            status: status,
+            isTranslationEnabled: isTranslationEnabled,
+            positionedTranslations: positionedTranslations,
+            overlayOpacity: overlayOpacity,
             translatedText: translation,
-            originalText: originalText,
-            status: .translating
+            originalText: originalText
         )
     }
     
     /// Show waiting state
     func showWaiting() {
-        currentView = PiPOverlayView(
-            translatedText: "",
-            originalText: nil,
-            status: .waiting
-        )
+        status = .waiting
+        updateCurrentView()
     }
     
     /// Show error state
     func showError(_ message: String) {
+        status = .error
         currentView = PiPOverlayView(
-            translatedText: message,
-            originalText: nil,
-            status: .error
+            mode: overlayMode,
+            status: .error,
+            isTranslationEnabled: isTranslationEnabled,
+            positionedTranslations: [],
+            overlayOpacity: overlayOpacity,
+            translatedText: message
+        )
+    }
+    
+    /// Update the current view based on state
+    private func updateCurrentView() {
+        currentView = PiPOverlayView(
+            mode: overlayMode,
+            status: status,
+            isTranslationEnabled: isTranslationEnabled,
+            positionedTranslations: positionedTranslations,
+            overlayOpacity: overlayOpacity
         )
     }
     
@@ -347,18 +619,22 @@ class PiPContentRenderer {
     
     /// Create a CMSampleBuffer from the current view
     private func createSampleBuffer() -> CMSampleBuffer? {
-        // Create hosting controller if needed
+        let size = renderSize
+        
+        // Create or update hosting controller
         if hostingController == nil {
             hostingController = UIHostingController(rootView: currentView)
-            hostingController?.view.frame = CGRect(origin: .zero, size: renderSize)
+            hostingController?.view.frame = CGRect(origin: .zero, size: size)
+            hostingController?.view.backgroundColor = .clear
         }
         
         // Update the view
         hostingController?.rootView = currentView
+        hostingController?.view.frame = CGRect(origin: .zero, size: size)
         hostingController?.view.layoutIfNeeded()
         
         // Render to image
-        guard let image = renderViewToImage() else { return nil }
+        guard let image = renderViewToImage(size: size) else { return nil }
         guard let pixelBuffer = createPixelBuffer(from: image) else { return nil }
         
         // Create sample buffer from pixel buffer
@@ -366,12 +642,12 @@ class PiPContentRenderer {
     }
     
     /// Render the SwiftUI view to a UIImage
-    private func renderViewToImage() -> UIImage? {
+    private func renderViewToImage(size: CGSize) -> UIImage? {
         guard let view = hostingController?.view else { return nil }
         
-        let renderer = UIGraphicsImageRenderer(size: renderSize)
+        let renderer = UIGraphicsImageRenderer(size: size)
         return renderer.image { context in
-            view.drawHierarchy(in: CGRect(origin: .zero, size: renderSize), afterScreenUpdates: true)
+            view.drawHierarchy(in: CGRect(origin: .zero, size: size), afterScreenUpdates: true)
         }
     }
     
