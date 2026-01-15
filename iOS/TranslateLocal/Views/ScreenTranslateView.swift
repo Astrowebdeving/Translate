@@ -390,6 +390,23 @@ struct ScreenTranslateView: View {
                 .font(.caption.bold())
                 .foregroundColor(.secondary)
             
+            // Translation Provider Picker (iOS 18+ for Apple)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Translation Engine")
+                    .font(.caption)
+                
+                Picker("Provider", selection: Binding(
+                    get: { screenService?.translationProvider ?? .localAI },
+                    set: { screenService?.translationProvider = $0 }
+                )) {
+                    ForEach(ScreenTranslationService.TranslationProvider.allCases, id: \.self) { provider in
+                        Label(provider.rawValue, systemImage: provider.icon)
+                            .tag(provider)
+                    }
+                }
+                .pickerStyle(.segmented)
+            }
+            
             // Opacity slider
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
@@ -410,20 +427,37 @@ struct ScreenTranslateView: View {
                 .tint(.indigo)
             }
             
-            // Smart positioning toggle
-            Toggle(isOn: Binding(
-                get: { screenService?.useSmartPositioning ?? true },
-                set: { screenService?.useSmartPositioning = $0 }
-            )) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Smart Positioning (Gemma)")
-                        .font(.caption)
-                    Text("Use AI to adjust translation positions")
-                        .font(.caption2)
+            // Smart positioning toggle - RAM Gated
+            if screenService?.isSmartOverlaySupported == true {
+                Toggle(isOn: Binding(
+                    get: { screenService?.useSmartPositioning ?? true },
+                    set: { screenService?.useSmartPositioning = $0 }
+                )) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Smart Positioning (Gemma)")
+                            .font(.caption)
+                        Text("Use AI to adjust translation positions")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .toggleStyle(SwitchToggleStyle(tint: .indigo))
+            } else {
+                // Show disabled state for low-RAM devices
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Smart Positioning (Gemma)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Text("Requires 8GB+ RAM device")
+                            .font(.caption2)
+                            .foregroundColor(.orange)
+                    }
+                    Spacer()
+                    Image(systemName: "lock.fill")
                         .foregroundColor(.secondary)
                 }
             }
-            .toggleStyle(SwitchToggleStyle(tint: .indigo))
             
             // Positioned translations count
             if let count = screenService?.positionedTranslations.count, count > 0 {

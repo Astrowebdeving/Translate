@@ -42,6 +42,27 @@ enum TranslationMode: String, CaseIterable {
     }
 }
 
+// MARK: - AI Model Type
+
+enum AIModelType: String, CaseIterable {
+    case opusMT = "Opus-MT"
+    case gemma = "Gemma 3n"
+    
+    var icon: String {
+        switch self {
+        case .opusMT: return "text.bubble"
+        case .gemma: return "cpu"
+        }
+    }
+    
+    var description: String {
+        switch self {
+        case .opusMT: return "Fast CoreML translation models"
+        case .gemma: return "Advanced LLM translation with context"
+        }
+    }
+}
+
 // MARK: - Cloud Translation Provider
 
 enum CloudProvider: String, CaseIterable, Identifiable {
@@ -389,6 +410,7 @@ struct TranslateView: View {
     @State private var translationError: String?
     @State private var useGlossary = true
     @State private var appliedGlossaryEntries: [GlossaryEntry] = []
+    @State private var selectedAIModel: AIModelType = .opusMT
     
     // Debug alerts
     @State private var showingDebugInfo = false
@@ -412,6 +434,10 @@ struct TranslateView: View {
     
     private var glossaryEntryCount: Int {
         glossaryService.enabledEntries
+    }
+    
+    private var isGemmaAvailable: Bool {
+        GemmaService.shared.isLoaded || MLXModelManager.shared.isGemmaReady
     }
     
     /// Debug info for helping diagnose issues
@@ -655,63 +681,143 @@ struct TranslateView: View {
     
     private var customAIModeContent: some View {
         VStack(spacing: 12) {
-            HStack(spacing: 16) {
-                Image(systemName: "cpu.fill")
-                    .font(.title2)
-                    .foregroundColor(.indigo)
-                    .frame(width: 44, height: 44)
-                    .background(Color.indigo.opacity(0.15))
-                    .cornerRadius(10)
+            // Model Type Picker
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Select Model")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
                 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("CoreML AI Models")
-                        .font(.headline)
-                    
-                    if availableModelCount > 0 {
-                        Text("\(availableModelCount) model(s) installed")
-                            .font(.caption)
-                            .foregroundColor(.green)
-                    } else {
-                        Text("No models installed")
-                            .font(.caption)
-                            .foregroundColor(.orange)
-                    }
+                Picker("Model Type", selection: $selectedAIModel) {
+                    Text("Opus-MT").tag(AIModelType.opusMT)
+                    Text("Gemma 3n").tag(AIModelType.gemma)
                 }
-                
-                Spacer()
-                
-                Button {
-                    showingModelDownloader = true
-                } label: {
-                    Text(availableModelCount > 0 ? "Manage" : "Download")
-                        .font(.caption.bold())
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                .pickerStyle(.segmented)
             }
             .padding()
             .background(Color(.systemGray6))
-            .cornerRadius(16)
+            .cornerRadius(12)
             
-            // Model info
-            if availableModelCount == 0 {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Image(systemName: "info.circle.fill")
-                            .foregroundColor(.indigo)
+            // Model-specific status
+            if selectedAIModel == .opusMT {
+                // Opus-MT CoreML Status
+                HStack(spacing: 16) {
+                    Image(systemName: "text.bubble.fill")
+                        .font(.title2)
+                        .foregroundColor(.indigo)
+                        .frame(width: 44, height: 44)
+                        .background(Color.indigo.opacity(0.15))
+                        .cornerRadius(10)
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Opus-MT CoreML")
+                            .font(.headline)
                         
-                        Text("Custom AI Models")
-                            .font(.caption.bold())
-                            .foregroundColor(.indigo)
+                        if availableModelCount > 0 {
+                            Text("\(availableModelCount) model(s) installed")
+                                .font(.caption)
+                                .foregroundColor(.green)
+                        } else {
+                            Text("No models installed")
+                                .font(.caption)
+                                .foregroundColor(.orange)
+                        }
                     }
                     
-                    Text("Download Opus-MT or Gemma models for advanced translation with context understanding. Perfect for OCR and custom phrase rules.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    Spacer()
+                    
+                    Button {
+                        showingModelDownloader = true
+                    } label: {
+                        Text(availableModelCount > 0 ? "Manage" : "Download")
+                            .font(.caption.bold())
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
                 }
                 .padding()
-                .background(Color.indigo.opacity(0.1))
-                .cornerRadius(12)
+                .background(Color(.systemGray6))
+                .cornerRadius(16)
+            } else {
+                // Gemma MLX Status
+                HStack(spacing: 16) {
+                    Image(systemName: "cpu.fill")
+                        .font(.title2)
+                        .foregroundColor(isGemmaAvailable ? .green : .orange)
+                        .frame(width: 44, height: 44)
+                        .background((isGemmaAvailable ? Color.green : Color.orange).opacity(0.15))
+                        .cornerRadius(10)
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Gemma 3n (MLX)")
+                            .font(.headline)
+                        
+                        if GemmaService.shared.isLoaded {
+                            Text("Loaded and ready")
+                                .font(.caption)
+                                .foregroundColor(.green)
+                        } else if MLXModelManager.shared.isGemmaReady {
+                            Text("Downloaded, tap to load")
+                                .font(.caption)
+                                .foregroundColor(.blue)
+                        } else if MLXModelManager.shared.isDownloading {
+                            Text("Downloading... \(Int(MLXModelManager.shared.downloadProgress * 100))%")
+                                .font(.caption)
+                                .foregroundColor(.blue)
+                        } else {
+                            Text("Not downloaded")
+                                .font(.caption)
+                                .foregroundColor(.orange)
+                        }
+                    }
+                    
+                    Spacer()
+                    
+                    if GemmaService.shared.isLoaded {
+                        Button {
+                             GemmaService.shared.unloadModel()
+                        } label: {
+                            Label("Reset", systemImage: "arrow.counterclockwise")
+                                .font(.caption.bold())
+                        }
+                        .tint(.red)
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        
+                        Text("Ready")
+                            .font(.caption.bold())
+                            .foregroundColor(.green)
+                    } else if MLXModelManager.shared.isDownloading {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else if MLXModelManager.shared.isGemmaReady {
+                        Button("Load") {
+                            Task {
+                                try? await GemmaService.shared.loadModel()
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                    } else {
+                        Button("Download") {
+                            Task {
+                                try? await MLXModelManager.shared.downloadGemma()
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
+                }
+                .padding()
+                .background(Color(.systemGray6))
+                .cornerRadius(16)
+                
+                // Gemma benefits
+                if isGemmaAvailable {
+                    HStack(spacing: 8) {
+                        benefitBadge(icon: "brain", text: "Context Aware", color: .purple)
+                        benefitBadge(icon: "text.quote", text: "Natural Output", color: .green)
+                    }
+                }
             }
         }
     }
@@ -1060,23 +1166,41 @@ struct TranslateView: View {
                 throw AppleTranslationError.translationFailed("Apple translation should be handled by view")
 
             case .customAI:
-                // Use custom CoreML models via TranslationService
-                print("🔴 [TranslateView] Calling translationService.translate()")
-                do {
-                    let translationResult = try await appState.translationService.translate(
+                // Use selected AI model for translation
+                print("🔴 [TranslateView] Calling AI translation with model: \(selectedAIModel.rawValue)")
+                
+                if selectedAIModel == .gemma {
+                    // Use Gemma MLX for translation
+                    if !GemmaService.shared.isLoaded {
+                        if MLXModelManager.shared.isGemmaReady {
+                            try await GemmaService.shared.loadModel()
+                        } else {
+                            throw TranslationError.modelNotLoaded("Gemma 3n is not downloaded. Please download it from Settings.")
+                        }
+                    }
+                    
+                    result = try await GemmaService.shared.translate(
                         text: textToTranslate,
-                        from: appState.sourceLanguage,
-                        to: appState.targetLanguage
+                        from: appState.sourceLanguage.name,
+                        to: appState.targetLanguage.name
                     )
-                    result = translationResult.translatedText
-                } catch {
-                    // If CoreML Opus-MT fails on Simulator (invalid logits / empty output),
-                    // fall back to Apple on-device translation so the user still gets a translation.
-                    if shouldFallbackToApple(error: error) {
-                        DebugLogger.translation("CoreML translation failed; attempting Apple fallback. Error: \(error.localizedDescription)", level: .warning)
-                        result = try await translateWithAppleFallback(textToTranslate)
-                    } else {
-                        throw error
+                } else {
+                    // Use Opus-MT CoreML models via TranslationService
+                    do {
+                        let translationResult = try await appState.translationService.translate(
+                            text: textToTranslate,
+                            from: appState.sourceLanguage,
+                            to: appState.targetLanguage
+                        )
+                        result = translationResult.translatedText
+                    } catch {
+                        // If CoreML Opus-MT fails, fall back to Apple on-device translation
+                        if shouldFallbackToApple(error: error) {
+                            DebugLogger.translation("CoreML translation failed; attempting Apple fallback. Error: \(error.localizedDescription)", level: .warning)
+                            result = try await translateWithAppleFallback(textToTranslate)
+                        } else {
+                            throw error
+                        }
                     }
                 }
                 print("🔴 [TranslateView] Got result: '\(result.prefix(50))'")

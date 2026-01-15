@@ -44,6 +44,7 @@
 		D3E372579DC55028019E3F32 /* ModelDownloadView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CB1035E4082E93EE874AC14 /* ModelDownloadView.swift */; };
 		DF4A2EF75E446C22181D44C3 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5DED3EE8915DD3D69F6E211 /* ShareViewController.swift */; };
 		E8D260B4A2483C1A81B8856F /* GlossaryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9DC48F48F077A0DFF2B20A7 /* GlossaryService.swift */; };
+		F05681DE2F18B5AF002A6EDC /* SpeechRecognitionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F05681DD2F18B5AF002A6EDC /* SpeechRecognitionService.swift */; };
 		F30185C14A827D07A26AB6F3 /* ScreenPayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = F28279B24519B25FD3F98951 /* ScreenPayload.swift */; };
 		FD7FE2FF20E026C5A6CE1BB4 /* GemmaService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E0324A6EECB1B7B8DA00F49 /* GemmaService.swift */; };
 		FE0CB6825CBF36A5D44A8FE2 /* PiPOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 739A109E60E02ABCD9E19CA2 /* PiPOverlayView.swift */; };
@@ -123,6 +124,7 @@
 		E9DC48F48F077A0DFF2B20A7 /* GlossaryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlossaryService.swift; sourceTree = "<group>"; };
 		EBC4084A87A2EA388D4C1423 /* TranslationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranslationService.swift; sourceTree = "<group>"; };
 		EE2C839BDB92B51FC5CE363A /* MLXModelManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MLXModelManager.swift; sourceTree = "<group>"; };
+		F05681DD2F18B5AF002A6EDC /* SpeechRecognitionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechRecognitionService.swift; sourceTree = "<group>"; };
 		F28279B24519B25FD3F98951 /* ScreenPayload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenPayload.swift; sourceTree = "<group>"; };
 		FB231BEA54CD26E014ED2190 /* PiPService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PiPService.swift; sourceTree = "<group>"; };
 		FCDA92E867E070874E8F4FBD /* ModelTokenizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelTokenizer.swift; sourceTree = "<group>"; };
@@ -156,6 +158,7 @@
 				4B9F86600EE385141AEEDEB9 /* OCRService.swift */,
 				FB231BEA54CD26E014ED2190 /* PiPService.swift */,
 				724A38545909A1EF15CDB5E3 /* ScreenTranslationService.swift */,
+				F05681DD2F18B5AF002A6EDC /* SpeechRecognitionService.swift */,
 				EBC4084A87A2EA388D4C1423 /* TranslationService.swift */,
 			);
 			path = Services;
@@ -450,6 +453,7 @@
 				61C62466D1B7AD9568CAC132 /* ScreenTranslationService.swift in Sources */,
 				D13DB3D3797E9B8935504723 /* SettingsView.swift in Sources */,
 				679A74D649877EF36D43266C /* TranslateLocalApp.swift in Sources */,
+				F05681DE2F18B5AF002A6EDC /* SpeechRecognitionService.swift in Sources */,
 				66950498AED73BCEDBE6E386 /* TranslateView.swift in Sources */,
 				2A35EFE3E3A5BA0253680E8E /* TranslationResult.swift in Sources */,
 				36C5077FCA241F5DA1F3EFA4 /* TranslationService.swift in Sources */,

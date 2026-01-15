@@ -11,6 +11,22 @@ import PhotosUI
 struct ImageTranslateView: View {
     @Environment(AppState.self) var appState
     
+    // Mode selection (Image vs Voice)
+    @State private var inputMode: InputMode = .image
+    
+    enum InputMode: String, CaseIterable {
+        case image = "Image"
+        case voice = "Voice"
+        
+        var icon: String {
+            switch self {
+            case .image: return "photo"
+            case .voice: return "mic.fill"
+            }
+        }
+    }
+    
+    // Image-related state
     @State private var selectedImage: UIImage?
     @State private var selectedItem: PhotosPickerItem?
     @State private var recognizedBlocks: [RecognizedTextBlock] = []
@@ -19,6 +35,11 @@ struct ImageTranslateView: View {
     @State private var isProcessing = false
     @State private var showingCamera = false
     @State private var viewMode: ViewMode = .overlay
+    
+    // Voice-related state
+    @State private var speechService = SpeechRecognitionService()
+    @State private var voiceTranslation: String = ""
+    @State private var isTranslatingVoice = false
     
     // Error and debug feedback
     @State private var showingError = false
@@ -32,63 +53,31 @@ struct ImageTranslateView: View {
         case textOnly = "Text Only"
     }
     
+    private var isGemmaAvailable: Bool {
+        GemmaService.shared.isLoaded || MLXModelManager.shared.isGemmaReady
+    }
+    
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
-                if let image = selectedImage {
-                    // Image with translations
-                    ZStack {
-                        switch viewMode {
-                        case .overlay:
-                            overlayView(image: image)
-                        case .sideBySide:
-                            sideBySideView(image: image)
-                        case .textOnly:
-                            textOnlyView()
-                        }
+                // Mode picker at top
+                Picker("Input Mode", selection: $inputMode) {
+                    ForEach(InputMode.allCases, id: \.self) { mode in
+                        Label(mode.rawValue, systemImage: mode.icon).tag(mode)
                     }
-                    
-                    // View mode picker
-                    Picker("View Mode", selection: $viewMode) {
-                        ForEach(ViewMode.allCases, id: \.self) { mode in
-                            Text(mode.rawValue).tag(mode)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .padding()
-                    
-                    // Actions
-                    HStack(spacing: 16) {
-                        Button {
-                            copyAllText()
-                        } label: {
-                            Label("Copy", systemImage: "doc.on.doc")
-                        }
-                        .buttonStyle(.bordered)
-                        
-                        Button {
-                            shareTranslation()
-                        } label: {
-                            Label("Share", systemImage: "square.and.arrow.up")
-                        }
-                        .buttonStyle(.bordered)
-                        
-                        Button {
-                            clearImage()
-                        } label: {
-                            Label("Clear", systemImage: "xmark")
-                        }
-                        .buttonStyle(.bordered)
-                        .tint(.red)
-                    }
-                    .padding(.bottom)
-                    
-                } else {
-                    // Empty state / Image picker
-                    emptyStateView
+                }
+                .pickerStyle(.segmented)
+                .padding()
+                
+                // Content based on mode
+                switch inputMode {
+                case .image:
+                    imageContent
+                case .voice:
+                    voiceContent
                 }
             }
-            .navigationTitle("Image")
+            .navigationTitle("Image & Voice")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -161,6 +150,364 @@ struct ImageTranslateView: View {
             }
         }
         .navigationViewStyle(.stack)  // Fix for iPad navigation issues
+    }
+    
+    // MARK: - Image Content
+    
+    private var imageContent: some View {
+        Group {
+            if let image = selectedImage {
+                // Image with translations
+                ZStack {
+                    switch viewMode {
+                    case .overlay:
+                        overlayView(image: image)
+                    case .sideBySide:
+                        sideBySideView(image: image)
+                    case .textOnly:
+                        textOnlyView()
+                    }
+                }
+                
+                // View mode picker
+                Picker("View Mode", selection: $viewMode) {
+                    ForEach(ViewMode.allCases, id: \.self) { mode in
+                        Text(mode.rawValue).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .padding()
+                
+                // Actions
+                HStack(spacing: 16) {
+                    Button {
+                        copyAllText()
+                    } label: {
+                        Label("Copy", systemImage: "doc.on.doc")
+                    }
+                    .buttonStyle(.bordered)
+                    
+                    Button {
+                        shareTranslation()
+                    } label: {
+                        Label("Share", systemImage: "square.and.arrow.up")
+                    }
+                    .buttonStyle(.bordered)
+                    
+                    Button {
+                        clearImage()
+                    } label: {
+                        Label("Clear", systemImage: "xmark")
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.red)
+                }
+                .padding(.bottom)
+                
+            } else {
+                // Empty state / Image picker
+                emptyStateView
+            }
+        }
+    }
+    
+    // MARK: - Voice Content
+    
+    private var voiceContent: some View {
+        ScrollView {
+            VStack(spacing: 20) {
+                // Language Selection
+                VStack(spacing: 12) {
+                    HStack {
+                        // Source language (for speech recognition)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Speak in")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            Menu {
+                                ForEach(Language.allLanguages) { language in
+                                    Button {
+                                        appState.sourceLanguage = language
+                                        speechService.setLanguage(Locale(identifier: language.id))
+                                    } label: {
+                                        HStack {
+                                            Text(language.name)
+                                            if appState.sourceLanguage == language {
+                                                Image(systemName: "checkmark")
+                                            }
+                                        }
+                                    }
+                                }
+                            } label: {
+                                HStack {
+                                    Text(appState.sourceLanguage.name)
+                                        .font(.headline)
+                                    Image(systemName: "chevron.down")
+                                        .font(.caption)
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(Color.indigo.opacity(0.1))
+                                .cornerRadius(8)
+                            }
+                        }
+                        
+                        Spacer()
+                        
+                        Image(systemName: "arrow.right")
+                            .foregroundColor(.secondary)
+                        
+                        Spacer()
+                        
+                        // Target language (for translation)
+                        VStack(alignment: .trailing, spacing: 4) {
+                            Text("Translate to")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            Menu {
+                                ForEach(Language.allLanguages) { language in
+                                    Button {
+                                        appState.targetLanguage = language
+                                    } label: {
+                                        HStack {
+                                            Text(language.name)
+                                            if appState.targetLanguage == language {
+                                                Image(systemName: "checkmark")
+                                            }
+                                        }
+                                    }
+                                }
+                            } label: {
+                                HStack {
+                                    Text(appState.targetLanguage.name)
+                                        .font(.headline)
+                                    Image(systemName: "chevron.down")
+                                        .font(.caption)
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(Color.green.opacity(0.1))
+                                .cornerRadius(8)
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal)
+                .padding(.top, 8)
+                
+                // Recording indicator
+                VStack(spacing: 16) {
+                    ZStack {
+                        Circle()
+                            .fill(speechService.isRecording ? Color.red.opacity(0.2) : Color.secondary.opacity(0.1))
+                            .frame(width: 120, height: 120)
+                        
+                        if speechService.isRecording {
+                            Circle()
+                                .stroke(Color.red, lineWidth: 4)
+                                .frame(width: 120, height: 120)
+                                .scaleEffect(1.1)
+                                .opacity(0.5)
+                                .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: speechService.isRecording)
+                        }
+                        
+                        Image(systemName: speechService.isRecording ? "mic.fill" : "mic")
+                            .font(.system(size: 50))
+                            .foregroundColor(speechService.isRecording ? .red : .indigo)
+                    }
+                    
+                    Text(speechService.isRecording ? "Tap to Stop" : "Tap to Record")
+                        .font(.headline)
+                        .foregroundColor(speechService.isRecording ? .red : .primary)
+                }
+                .onTapGesture {
+                    toggleRecording()
+                }
+                
+                // Transcription display
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("Transcription")
+                            .font(.headline)
+                        Spacer()
+                        if !speechService.transcribedText.isEmpty {
+                            Button("Clear") {
+                                speechService.clearTranscription()
+                                voiceTranslation = ""
+                            }
+                            .font(.caption)
+                        }
+                    }
+                    
+                    Text(speechService.transcribedText.isEmpty ? "Your speech will appear here..." : speechService.transcribedText)
+                        .foregroundColor(speechService.transcribedText.isEmpty ? .secondary : .primary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelection(.enabled)
+                        .padding()
+                        .background(Color(.systemGray6))
+                        .cornerRadius(12)
+                }
+                .padding(.horizontal)
+                
+                // Translation Buttons
+                VStack(spacing: 12) {
+                    // Apple Translation Button (iOS 18+)
+                    if #available(iOS 18.0, *) {
+                        Button {
+                            Task { await translateWithApple() }
+                        } label: {
+                            HStack {
+                                if isTranslatingVoice {
+                                    ProgressView()
+                                        .tint(.white)
+                                } else {
+                                    Image(systemName: "apple.logo")
+                                }
+                                Text(isTranslatingVoice ? "Translating..." : "Translate with Apple")
+                            }
+                            .font(.headline)
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(!speechService.transcribedText.isEmpty ? Color.blue : Color.gray)
+                            .cornerRadius(12)
+                        }
+                        .disabled(speechService.transcribedText.isEmpty || isTranslatingVoice)
+                    }
+                    
+                    // Gemma Translation Button
+                    Button {
+                        Task { await translateWithGemma() }
+                    } label: {
+                        HStack {
+                            if isTranslatingVoice {
+                                ProgressView()
+                                    .tint(.white)
+                            } else {
+                                Image(systemName: "cpu")
+                            }
+                            Text(isTranslatingVoice ? "Translating..." : "Translate with Gemma 3n")
+                        }
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(isGemmaAvailable && !speechService.transcribedText.isEmpty ? Color.indigo : Color.gray)
+                        .cornerRadius(12)
+                    }
+                    .disabled(!isGemmaAvailable || speechService.transcribedText.isEmpty || isTranslatingVoice)
+                    
+                    // Gemma status indicator
+                    if !isGemmaAvailable {
+                        HStack {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundColor(.orange)
+                            Text("Gemma 3n not loaded - go to Settings to download")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+                .padding(.horizontal)
+                
+                // Translation result
+                if !voiceTranslation.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Translation")
+                                .font(.headline)
+                            Spacer()
+                            Button {
+                                UIPasteboard.general.string = voiceTranslation
+                            } label: {
+                                Image(systemName: "doc.on.doc")
+                            }
+                        }
+                        
+                        Text(voiceTranslation)
+                            .padding()
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color.indigo.opacity(0.1))
+                            .cornerRadius(12)
+                            .textSelection(.enabled)
+                    }
+                    .padding(.horizontal)
+                }
+                
+                // Error display
+                if let error = speechService.error {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundColor(.red)
+                        .padding(.horizontal)
+                }
+                
+                Spacer()
+            } // VStack
+        } // ScrollView
+    }
+    
+    // MARK: - Voice Actions
+    
+    private func toggleRecording() {
+        if speechService.isRecording {
+            speechService.stopRecording()
+        } else {
+            Task {
+                do {
+                    // Set language based on source language
+                    speechService.setLanguage(Locale(identifier: appState.sourceLanguage.id))
+                    try await speechService.startRecording()
+                } catch {
+                    errorMessage = error.localizedDescription
+                    showingError = true
+                }
+            }
+        }
+    }
+    
+    private func translateWithGemma() async {
+        guard !speechService.transcribedText.isEmpty else { return }
+        
+        isTranslatingVoice = true
+        defer { isTranslatingVoice = false }
+        
+        do {
+            // Load Gemma if not loaded
+            if !GemmaService.shared.isLoaded {
+                try await GemmaService.shared.loadModel()
+            }
+            
+            let result = try await GemmaService.shared.translate(
+                text: speechService.transcribedText,
+                from: appState.sourceLanguage.name,
+                to: appState.targetLanguage.name
+            )
+            
+            voiceTranslation = result
+        } catch {
+            errorMessage = "Translation failed: \(error.localizedDescription)"
+            showingError = true
+        }
+    }
+    
+    private func translateWithApple() async {
+        guard !speechService.transcribedText.isEmpty else { return }
+        
+        isTranslatingVoice = true
+        defer { isTranslatingVoice = false }
+        
+        do {
+            let result = try await appState.translationService.translate(
+                text: speechService.transcribedText,
+                from: appState.sourceLanguage,
+                to: appState.targetLanguage
+            )
+            voiceTranslation = result.translatedText
+        } catch {
+            errorMessage = "Apple Translation failed: \(error.localizedDescription)"
+            showingError = true
+        }
     }
     
     // MARK: - View Components

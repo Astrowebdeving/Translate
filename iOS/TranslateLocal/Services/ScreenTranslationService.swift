@@ -58,6 +58,29 @@ class ScreenTranslationService {
         return pipService.isOverlayFeatureAvailable
     }
     
+    /// Check if device has sufficient RAM for Smart (Gemma) overlay
+    var isSmartOverlaySupported: Bool {
+        return MLXModelManager.shared.hasSufficientMemoryForPiP()
+    }
+    
+    // MARK: - Translation Provider
+    
+    /// Available translation providers for PiP
+    enum TranslationProvider: String, CaseIterable {
+        case localAI = "Local AI"
+        case apple = "Apple"
+        
+        var icon: String {
+            switch self {
+            case .localAI: return "cpu"
+            case .apple: return "apple.logo"
+            }
+        }
+    }
+    
+    /// Current translation provider
+    var translationProvider: TranslationProvider = .localAI
+    
     // MARK: - Private Properties
     
     /// File monitoring timer
@@ -416,21 +439,48 @@ class ScreenTranslationService {
                 translatedBlockCount += positioned.count
                 
             } else {
-                // Simple translation mode
-                let result = try await translationService.translate(
-                    text: textToTranslate,
-                    from: sourceLanguage,
-                    to: targetLanguage
-                )
+                // Simple translation mode - route based on provider
+                let translatedText: String
+                
+                switch translationProvider {
+                case .apple:
+                    // Use Apple Translation (iOS 18+)
+                    if #available(iOS 18.0, *) {
+                        let appleService = AppleTranslationService()
+                        translatedText = try await appleService.translate(
+                            text: textToTranslate,
+                            from: sourceLanguage.id,
+                            to: targetLanguage.id
+                        )
+                        addDebugLog("Apple translation done: \(truncate(translatedText, maxLength: 30))")
+                    } else {
+                        // Fallback to local AI on iOS 17
+                        addDebugLog("Apple Translation not available, falling back to Local AI")
+                        let result = try await translationService.translate(
+                            text: textToTranslate,
+                            from: sourceLanguage,
+                            to: targetLanguage
+                        )
+                        translatedText = result.translatedText
+                    }
+                    
+                case .localAI:
+                    let result = try await translationService.translate(
+                        text: textToTranslate,
+                        from: sourceLanguage,
+                        to: targetLanguage
+                    )
+                    translatedText = result.translatedText
+                    addDebugLog("Local AI translation done: \(truncate(translatedText, maxLength: 30))")
+                }
                 
                 guard !Task.isCancelled else { return }
                 
-                addDebugLog("Translation done: \(truncate(result.translatedText, maxLength: 30))")
                 DebugLogger.screenTranslation("Translation complete", level: .success)
                 
                 // Update PiP with translation
                 pipService.updateContent(
-                    result.translatedText,
+                    translatedText,
                     originalText: truncate(textToTranslate, maxLength: 50)
                 )
                 

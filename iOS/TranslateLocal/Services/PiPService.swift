@@ -252,6 +252,13 @@ class PiPService: NSObject {
             return
         }
         
+        // Check for sufficient RAM (8GB+ required for stable background inference)
+        guard MLXModelManager.shared.hasSufficientMemoryForPiP() else {
+            DebugLogger.pip("Smart overlay disabled: Device has insufficient RAM (< 8GB)", level: .error)
+            statusMessage = "Smart features require 8GB+ RAM"
+            return
+        }
+        
         // Load Gemma if not already loaded
         if !GemmaService.shared.isLoaded && MLXModelManager.shared.isGemmaReady {
             do {

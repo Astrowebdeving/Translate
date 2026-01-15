@@ -59,6 +59,10 @@
     <string>TranslateLocal needs photo library access to translate text from your images. Selected photos are processed locally and never uploaded.</string>
     <key>NSPhotoLibraryAddUsageDescription</key>
     <string>TranslateLocal can save translated images to your photo library if you choose.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>TranslateLocal needs microphone access to record your voice for speech-to-text transcription and translation. All processing happens on your device.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>TranslateLocal uses speech recognition to transcribe your voice for translation. All processing happens on your device.</string>
     
     <!-- URL Schemes -->
     <key>CFBundleURLTypes</key>

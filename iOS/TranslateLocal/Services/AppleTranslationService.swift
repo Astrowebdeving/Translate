@@ -125,15 +125,13 @@ class AppleTranslationService {
     /// This service provides language availability checking but actual translation
     /// should be performed in SwiftUI views using .translationTask
     private func performTranslationWithSwiftUI(text: String, source: Locale.Language, target: Locale.Language) async throws -> String {
-        // Placeholder implementation - proper translation requires SwiftUI .translationTask modifier
-        // The actual implementation should be done in SwiftUI views like this:
-        //
-        // .translationTask(.init(source: source, target: target)) { session in
-        //     let response = try await session.translate(text)
-        //     // handle response
-        // }
-
-        throw AppleTranslationError.translationFailed("Apple Translation requires SwiftUI integration. Use .translationTask modifier in views.")
+        // iOS 18 doesn't provide a non-UI API for translation.
+        // TranslationSession can only be obtained via .translationTask modifier.
+        // For background translation (like PiP), we need to use a workaround.
+        // The session from .translationTask can be stored and reused if needed.
+        // For now, throw an error indicating SwiftUI integration is required.
+        // The calling code should handle this gracefully.
+        throw AppleTranslationError.translationFailed("Apple Translation requires active SwiftUI context. Use Local AI for background PiP translation.")
     }
     
     /// Map our language codes to Apple's expected format

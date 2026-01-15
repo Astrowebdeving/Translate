@@ -71,8 +71,16 @@ class GemmaService {
         throw GemmaError.loadFailed(simulatorError)
         #else
         
-        guard mlxManager.isGemmaReady else {
-            throw GemmaError.modelNotDownloaded
+        // Don't hard-fail based on a filesystem check. The MLX LM library manages its own cache.
+        // If the cache is missing, loadContainer will throw and we surface the real error.
+        if !mlxManager.isGemmaReady {
+            DebugLogger.model("Gemma not marked as downloaded; attempting load anyway (may trigger download in library cache)", level: .warning)
+            // If the user hasn't finished the download flow, this might hang or fail.
+        } else {
+            // Validate disk space before loading to prevent crashes on low memory devices
+            if mlxManager.hasSufficientDiskSpaceForLoad() == false {
+                 DebugLogger.model("⚠️ Low disk space detected. Loading Gemma might fail.", level: .warning)
+            }
         }
         
         DebugLogger.model("Loading Gemma model...", level: .info)
@@ -91,6 +99,8 @@ class GemmaService {
             }
             
             isLoaded = true
+            // Mark ready for UI.
+            mlxManager.checkGemmaStatus()
             DebugLogger.model("Gemma model loaded successfully", level: .success)
             
         } catch {
@@ -135,12 +145,13 @@ class GemmaService {
         let startTime = Date()
         
         // Build translation prompt
+        // Build translation prompt using Gemma 3n chat format
         let prompt = """
+        <start_of_turn>user
         Translate the following text from \(sourceLanguage) to \(targetLanguage). Output only the translation, nothing else.
         
-        Text: \(text)
-        
-        Translation:
+        Text: \(text)<end_of_turn>
+        <start_of_turn>model
         """
         
         DebugLogger.translation("Gemma translating from \(sourceLanguage) to \(targetLanguage): \(text.prefix(50))...", level: .info)
@@ -185,15 +196,15 @@ class GemmaService {
         
         let joinedText = textBlocks.joined(separator: "\n")
         let prompt = """
+        <start_of_turn>user
         Analyze the following text from a mobile screen. Respond with JSON containing:
         - content_type: one of (article, chat, menu, form, video, social, unknown)
         - summary: brief summary (max 20 words)
         - suggested_actions: list of actions
         
         Text:
-        \(joinedText)
-        
-        JSON Response:
+        \(joinedText)<end_of_turn>
+        <start_of_turn>model
         """
         
         do {

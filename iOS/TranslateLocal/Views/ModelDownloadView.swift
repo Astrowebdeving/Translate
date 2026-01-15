@@ -112,6 +112,7 @@ struct ModelDownloadView: View {
 struct GemmaDownloadRow: View {
     @State private var mlxManager = MLXModelManager.shared
     @State private var showDeleteConfirmation = false
+    @State private var showResetConfirmation = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -159,6 +160,15 @@ struct GemmaDownloadRow: View {
                     
                     Spacer()
                     
+                    Button {
+                        showResetConfirmation = true
+                    } label: {
+                        Text("Reset & Re-download")
+                            .font(.caption.bold())
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    
                     Button(role: .destructive) {
                         showDeleteConfirmation = true
                     } label: {
@@ -179,6 +189,19 @@ struct GemmaDownloadRow: View {
             }
         }
         .padding(.vertical, 4)
+        .confirmationDialog("Reset Gemma Cache?", isPresented: $showResetConfirmation, titleVisibility: .visible) {
+            Button("Reset & Re-download", role: .destructive) {
+                Task {
+                    // Unload to prevent holding GPU memory while resetting
+                    GemmaService.shared.unloadModel()
+                    mlxManager.resetGemmaCache()
+                    try? await mlxManager.downloadGemma()
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This will reset Gemma's download state and attempt a fresh download. It may still take significant storage (~\(mlxManager.estimatedSizeText)).")
+        }
         .confirmationDialog("Delete Gemma Model?", isPresented: $showDeleteConfirmation, titleVisibility: .visible) {
             Button("Delete", role: .destructive) {
                 try? mlxManager.deleteGemma()

@@ -15,7 +15,7 @@ struct ContentView: View {
     enum Tab: String, CaseIterable {
         case camera = "Camera"
         case screen = "Screen"
-        case image = "Image"
+        case image = "Image & Voice"
         case translate = "Translate"
         case settings = "Settings"
         
@@ -23,7 +23,7 @@ struct ContentView: View {
             switch self {
             case .camera: return "camera.viewfinder"
             case .screen: return "rectangle.inset.filled.and.person.filled"
-            case .image: return "photo.on.rectangle"
+            case .image: return "photo.badge.waveform"
             case .translate: return "textformat"
             case .settings: return "gearshape"
             }

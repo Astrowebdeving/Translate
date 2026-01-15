@@ -585,6 +585,7 @@ class TranslationService {
         
         // Try to load Gemma if it's the selected model and not yet loaded
         if modelType == .gemma3n && MLXModelManager.shared.isGemmaReady && !GemmaService.shared.isLoaded {
+             DebugLogger.translation("Gemma selected but not loaded. Attempting autoload via GemmaService.", level: .debug)
             do {
                 try await GemmaService.shared.loadModel()
                 DebugLogger.translation("Loaded GemmaService, retrying with MLX", level: .info)
@@ -803,9 +804,13 @@ class TranslationService {
         DebugLogger.translation("Starting Decoder Loop. Start: \(startToken), EOS: \(eosToken)", level: .debug)
         
         // Decoder output length cap: keep UI responsive.
+        // Note: These exported decoders are very slow on Simulator because they emit logits for the full
+        // sequence length (512) every step. We use a time budget rather than "wait for EOS".
         #if targetEnvironment(simulator)
-        let maxDecodeSteps = min(48, tokenizer.config.max_length)
-        let decodeTimeBudgetSeconds: TimeInterval = 6.0
+        let maxDecodeSteps = min(64, tokenizer.config.max_length)
+        // Scale time budget with input length (paragraphs need longer than single words).
+        // Cap to avoid multi-minute waits on Simulator.
+        let decodeTimeBudgetSeconds: TimeInterval = min(20.0, 6.0 + (Double(inputTokens.count) / 4.0))
         #else
         let maxDecodeSteps = min(128, tokenizer.config.max_length)
         let decodeTimeBudgetSeconds: TimeInterval = 12.0
@@ -964,6 +969,11 @@ class TranslationService {
                 // Token id 2 is "," in your vocab (seen in logs).
                 if t1 == 2 && t3 == 2 && t2 == t4 {
                     DebugLogger.translation("Stopping decode early (alternating repetition detected). pattern=[2,\(t2),2,\(t4)]", level: .warning)
+                    // Trim repeated tail so the returned text isn't "money, money, money".
+                    // Example: [start, Money, ',', money, ',', money] -> keep [start, Money]
+                    if outputTokens.count >= 4 {
+                        outputTokens.removeLast(4)
+                    }
                     break
                 }
             }
