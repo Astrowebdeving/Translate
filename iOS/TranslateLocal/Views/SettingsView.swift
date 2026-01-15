@@ -319,10 +319,17 @@ struct ModelRow: View {
             
             Spacer()
             
-            if appState.modelManager.isModelLoaded(type) {
-                Label("Loaded", systemImage: "checkmark.circle.fill")
-                    .font(.caption)
-                    .foregroundColor(.green)
+            // Check if loaded in TranslationService (the one that actually matters)
+            if appState.translationService.loadedModels.contains(type) {
+                Button {
+                    unloadModel()
+                } label: {
+                    Label("Unload", systemImage: "xmark.circle")
+                        .font(.caption)
+                        .foregroundColor(.orange)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
             } else if appState.modelManager.isModelAvailable(type) {
                 Button {
                     loadModel()
@@ -350,12 +357,19 @@ struct ModelRow: View {
         isLoading = true
         Task {
             do {
-                _ = try await appState.modelManager.loadModel(type)
+                // Use TranslationService.loadModel which loads encoder, decoder, AND tokenizer
+                try await appState.translationService.loadModel(type)
+                DebugLogger.model("Successfully loaded model \(type.rawValue) via Settings", level: .info)
             } catch {
-                print("Failed to load model: \(error)")
+                DebugLogger.model("Failed to load model via Settings: \(error)", level: .error)
             }
             isLoading = false
         }
+    }
+    
+    private func unloadModel() {
+        appState.translationService.unloadModel(type)
+        DebugLogger.model("Unloaded model \(type.rawValue) via Settings", level: .info)
     }
 }
 

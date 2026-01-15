@@ -232,6 +232,83 @@ class PiPService: NSObject {
         contentRenderer?.setOverlayOpacity(overlayOpacity)
     }
     
+    // MARK: - Gemma Smart Features
+    
+    /// Whether Gemma is available for smart features
+    var isGemmaAvailable: Bool {
+        GemmaService.shared.isLoaded || MLXModelManager.shared.isGemmaReady
+    }
+    
+    /// Smart overlay mode enabled (uses Gemma for analysis)
+    private(set) var smartOverlayEnabled = false
+    
+    /// Last analysis result from Gemma
+    private(set) var lastAnalysis: PiPAnalysis?
+    
+    /// Enable smart overlay mode using Gemma
+    func enableSmartOverlay() async {
+        guard isGemmaAvailable else {
+            DebugLogger.pip("Gemma not available, cannot enable smart overlay", level: .warning)
+            return
+        }
+        
+        // Load Gemma if not already loaded
+        if !GemmaService.shared.isLoaded && MLXModelManager.shared.isGemmaReady {
+            do {
+                try await GemmaService.shared.loadModel()
+                DebugLogger.pip("Loaded GemmaService for smart overlay", level: .success)
+            } catch {
+                DebugLogger.pip("Failed to load Gemma: \(error.localizedDescription)", level: .error)
+                return
+            }
+        }
+        
+        smartOverlayEnabled = true
+        statusMessage = "Smart Overlay Active"
+        DebugLogger.pip("Smart overlay enabled with Gemma", level: .success)
+    }
+    
+    /// Disable smart overlay mode
+    func disableSmartOverlay() {
+        smartOverlayEnabled = false
+        lastAnalysis = nil
+        statusMessage = "Smart Overlay Disabled"
+        DebugLogger.pip("Smart overlay disabled", level: .info)
+    }
+    
+    /// Analyze current screen content using Gemma
+    /// Returns analysis of content type, summary, and suggested actions
+    func analyzeScreenWithGemma() async throws -> PiPAnalysis? {
+        guard GemmaService.shared.isLoaded else {
+            DebugLogger.pip("Gemma not loaded, cannot analyze", level: .warning)
+            return nil
+        }
+        
+        guard !positionedTranslations.isEmpty else {
+            DebugLogger.pip("No content to analyze", level: .debug)
+            return nil
+        }
+        
+        let texts = positionedTranslations.map { $0.originalText }
+        
+        do {
+            let analysis = try await GemmaService.shared.analyzeForPiP(textBlocks: texts)
+            lastAnalysis = analysis
+            
+            DebugLogger.pip("Gemma analysis: type=\(analysis.contentType), summary=\(analysis.summary.prefix(50))...", level: .info)
+            
+            return analysis
+        } catch {
+            DebugLogger.pip("Gemma analysis failed: \(error.localizedDescription)", level: .error)
+            throw error
+        }
+    }
+    
+    /// Get smart suggestions based on Gemma analysis
+    func getSmartSuggestions() -> [String] {
+        return lastAnalysis?.suggestedActions ?? []
+    }
+    
     /// Demo mode for testing PiP on simulator
     /// This cycles through sample translations to verify PiP is working
     #if targetEnvironment(simulator)

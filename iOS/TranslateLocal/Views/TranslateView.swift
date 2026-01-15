@@ -6,6 +6,9 @@
 //
 
 import SwiftUI
+#if canImport(Translation)
+import Translation
+#endif
 
 // MARK: - Translation Mode
 
@@ -387,6 +390,18 @@ struct TranslateView: View {
     @State private var useGlossary = true
     @State private var appliedGlossaryEntries: [GlossaryEntry] = []
     
+    // Debug alerts
+    @State private var showingDebugInfo = false
+    @State private var showingNotImplementedAlert = false
+    @State private var notImplementedMessage = ""
+    
+    // Debug console state
+    @State private var debugLogs: [DebugLogger.LogEntry] = []
+    @State private var debugLogCategory: DebugLogger.Category? = nil
+    
+    // Apple fallback translation request (hidden .translationTask helper)
+    @State private var appleFallbackRequest: AppleFallbackRequest?
+    
     private var availableModelCount: Int {
         coreMLDownloader.downloadedModels.count
     }
@@ -397,6 +412,31 @@ struct TranslateView: View {
     
     private var glossaryEntryCount: Int {
         glossaryService.enabledEntries
+    }
+    
+    /// Debug info for helping diagnose issues
+    private var debugStatusInfo: String {
+        """
+        📊 TranslateLocal Debug Info
+        
+        Mode: \(translationMode.rawValue)
+        
+        📱 Custom AI Models:
+        • Downloaded: \(coreMLDownloader.downloadedModels.count)
+        • Gemma MLX: \(MLXModelManager.shared.isGemmaReady ? "✅ Ready" : "❌ Not Downloaded")
+        • GemmaService: \(GemmaService.shared.isLoaded ? "✅ Loaded" : "⚠️ Not Loaded")
+        
+        🍎 Apple Translation:
+        • Languages: \(appleLanguageCount)
+        
+        ☁️ Cloud APIs:
+        • Google: \(cloudService.googleAPIKey.isEmpty ? "❌ No Key" : "✅ Configured")
+        • Gemini: \(cloudService.geminiAPIKey.isEmpty ? "❌ No Key" : "✅ Configured")
+        • OpenAI: \(cloudService.openAIAPIKey.isEmpty ? "❌ No Key" : "✅ Configured")
+        • DeepL: \(cloudService.deepLAPIKey.isEmpty ? "❌ No Key" : "✅ Configured")
+        
+        📖 Glossary: \(glossaryEntryCount) entries
+        """
     }
     
     var body: some View {
@@ -436,8 +476,40 @@ struct TranslateView: View {
                 }
                 .padding()
             }
+            .background {
+                // Hidden view to run Apple Translation session when requested
+                if let req = appleFallbackRequest {
+                    AppleTranslationFallbackHelper(
+                        text: req.text,
+                        source: req.source,
+                        target: req.target
+                    ) { result in
+                        req.completion(result)
+                        appleFallbackRequest = nil
+                    }
+                    .frame(width: 0, height: 0)
+                    .hidden()
+                }
+            }
+            .onAppear {
+                print("⭐️ TranslateView APPEARED - iOS 18+ version")
+                print("⭐️ translationMode: \\(translationMode)")
+                print("⭐️ sourceText: '\\(sourceText)'")
+                print("⭐️ canTranslate: \\(canTranslate)")
+            }
             .navigationTitle("Translate")
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    // Debug info button
+                    Button {
+                        // Populate logs immediately so the sheet isn't empty even if .task doesn't fire yet
+                        debugLogs = DebugLogger.getRecentLogs(count: 200)
+                        showingDebugInfo = true
+                    } label: {
+                        Image(systemName: "ladybug")
+                            .foregroundColor(.orange)
+                    }
+                }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     toolbarButton
                 }
@@ -455,6 +527,18 @@ struct TranslateView: View {
                 if let service = appleService {
                     AppleLanguagesSheet(appleService: service)
                 }
+            }
+            .sheet(isPresented: $showingDebugInfo) {
+                DebugConsoleSheet(
+                    debugStatusInfo: debugStatusInfo,
+                    logs: $debugLogs,
+                    selectedCategory: $debugLogCategory
+                )
+            }
+            .alert("Not Implemented", isPresented: $showingNotImplementedAlert) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(notImplementedMessage)
             }
             .task {
                 await appleTranslationService?.checkAvailableLanguages()
@@ -691,13 +775,65 @@ struct TranslateView: View {
                 
                 Spacer()
                 
-                // Language indicator
-                Text("\(appState.sourceLanguage.id.uppercased()) → \(appState.targetLanguage.id.uppercased())")
-                    .font(.caption)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color.indigo.opacity(0.2))
-                    .cornerRadius(8)
+                // Language selector with dropdown menus
+                HStack(spacing: 4) {
+                    // Source language picker
+                    Menu {
+                        ForEach(Language.allLanguages) { language in
+                            Button {
+                                appState.sourceLanguage = language
+                            } label: {
+                                HStack {
+                                    Text(language.name)
+                                    if appState.sourceLanguage == language {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                        }
+                    } label: {
+                        Text(appState.sourceLanguage.id.uppercased())
+                            .font(.caption.bold())
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.indigo)
+                            .cornerRadius(6)
+                    }
+                    
+                    // Swap button
+                    Button {
+                        appState.swapLanguages()
+                    } label: {
+                        Image(systemName: "arrow.left.arrow.right")
+                            .font(.caption2)
+                            .foregroundColor(.indigo)
+                    }
+                    
+                    // Target language picker
+                    Menu {
+                        ForEach(Language.allLanguages) { language in
+                            Button {
+                                appState.targetLanguage = language
+                            } label: {
+                                HStack {
+                                    Text(language.name)
+                                    if appState.targetLanguage == language {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                        }
+                    } label: {
+                        Text(appState.targetLanguage.id.uppercased())
+                            .font(.caption.bold())
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.indigo)
+                            .cornerRadius(6)
+                    }
+                }
             }
             
             TextEditor(text: $sourceText)
@@ -759,7 +895,9 @@ struct TranslateView: View {
     
     private var translateButton: some View {
         Button {
+            print("🟢 BUTTON TAPPED - IMMEDIATE (before Task)")
             Task {
+                print("🟢 Inside Task - about to call translate()")
                 await translate()
             }
         } label: {
@@ -886,6 +1024,7 @@ struct TranslateView: View {
     // MARK: - Actions
     
     private func translate() async {
+        print("🔴 [TranslateView] translate() called - mode: \(translationMode)")
         isTranslating = true
         translationError = nil
         appliedGlossaryEntries = []
@@ -912,6 +1051,7 @@ struct TranslateView: View {
             }
 
             var result: String
+            print("🔴 [TranslateView] About to switch on translationMode: \(translationMode)")
 
             switch translationMode {
 
@@ -921,12 +1061,25 @@ struct TranslateView: View {
 
             case .customAI:
                 // Use custom CoreML models via TranslationService
-                let translationResult = try await appState.translationService.translate(
-                    text: textToTranslate,
-                    from: appState.sourceLanguage,
-                    to: appState.targetLanguage
-                )
-                result = translationResult.translatedText
+                print("🔴 [TranslateView] Calling translationService.translate()")
+                do {
+                    let translationResult = try await appState.translationService.translate(
+                        text: textToTranslate,
+                        from: appState.sourceLanguage,
+                        to: appState.targetLanguage
+                    )
+                    result = translationResult.translatedText
+                } catch {
+                    // If CoreML Opus-MT fails on Simulator (invalid logits / empty output),
+                    // fall back to Apple on-device translation so the user still gets a translation.
+                    if shouldFallbackToApple(error: error) {
+                        DebugLogger.translation("CoreML translation failed; attempting Apple fallback. Error: \(error.localizedDescription)", level: .warning)
+                        result = try await translateWithAppleFallback(textToTranslate)
+                    } else {
+                        throw error
+                    }
+                }
+                print("🔴 [TranslateView] Got result: '\(result.prefix(50))'")
                 
             case .cloud:
                 // Use cloud API
@@ -956,11 +1109,181 @@ struct TranslateView: View {
             translatedText = result
             
         } catch {
+            print("🔴 [TranslateView] ERROR: \(error)")
             translationError = error.localizedDescription
             translatedText = ""
         }
         
         isTranslating = false
+    }
+    
+    private func shouldFallbackToApple(error: Error) -> Bool {
+        #if targetEnvironment(simulator)
+        // Apple Translation is not reliably available on Simulator (language packs/runtime),
+        // so don't waste time attempting fallback here.
+        return false
+        #else
+        // On device, don't hide CoreML failures unless explicitly invalid logits.
+        let msg = error.localizedDescription.lowercased()
+        return msg.contains("invalid logits") || msg.contains("all logits") || msg.contains("nan")
+        #endif
+    }
+    
+    private func mapAppleLanguageCode(_ code: String) -> String {
+        switch code {
+        case "zh": return "zh-Hans"
+        default: return code
+        }
+    }
+    
+    private func translateWithAppleFallback(_ text: String) async throws -> String {
+        #if canImport(Translation)
+        guard #available(iOS 18.0, *) else {
+            throw AppleTranslationError.translationFailed("Apple Translation requires iOS 18+.")
+        }
+        
+        let source = Locale.Language(identifier: mapAppleLanguageCode(appState.sourceLanguage.id))
+        let target = Locale.Language(identifier: mapAppleLanguageCode(appState.targetLanguage.id))
+        
+        return try await withCheckedThrowingContinuation { continuation in
+            appleFallbackRequest = AppleFallbackRequest(
+                text: text,
+                source: source,
+                target: target
+            ) { result in
+                switch result {
+                case .success(let translated):
+                    continuation.resume(returning: translated)
+                case .failure(let err):
+                    continuation.resume(throwing: err)
+                }
+            }
+        }
+        #else
+        throw AppleTranslationError.translationFailed("Translation framework not available in this build.")
+        #endif
+    }
+}
+
+// MARK: - Apple Translation Fallback Helper
+
+private struct AppleFallbackRequest {
+    let text: String
+    let source: Locale.Language
+    let target: Locale.Language
+    let completion: (Result<String, Error>) -> Void
+}
+
+#if canImport(Translation)
+@available(iOS 18.0, *)
+private struct AppleTranslationFallbackHelper: View {
+    let text: String
+    let source: Locale.Language
+    let target: Locale.Language
+    let completion: (Result<String, Error>) -> Void
+    
+    var body: some View {
+        Color.clear
+            .translationTask(.init(source: source, target: target)) { session in
+                do {
+                    let response = try await session.translate(text)
+                    completion(.success(response.targetText))
+                } catch {
+                    completion(.failure(error))
+                }
+            }
+    }
+}
+#endif
+
+// MARK: - Debug Console Sheet
+
+@available(iOS 18.0, *)
+private struct DebugConsoleSheet: View {
+    @Environment(\.dismiss) var dismiss
+    
+    let debugStatusInfo: String
+    @Binding var logs: [DebugLogger.LogEntry]
+    @Binding var selectedCategory: DebugLogger.Category?
+    
+    @State private var showStatus = true
+    
+    private var filteredLogs: [DebugLogger.LogEntry] {
+        guard let cat = selectedCategory else { return logs }
+        return logs.filter { $0.category == cat }
+    }
+    
+    var body: some View {
+        NavigationView {
+            List {
+                Section {
+                    Toggle("Show Status Summary", isOn: $showStatus)
+                }
+                
+                if showStatus {
+                    Section("Status") {
+                        Text(debugStatusInfo)
+                            .font(.caption)
+                            .textSelection(.enabled)
+                    }
+                }
+                
+                Section {
+                    Picker("Category", selection: Binding(
+                        get: { selectedCategory?.rawValue ?? "All" },
+                        set: { newValue in
+                            selectedCategory = (newValue == "All") ? nil : DebugLogger.Category(rawValue: newValue)
+                        }
+                    )) {
+                        Text("All").tag("All")
+                        ForEach(DebugLogger.allCategories, id: \.rawValue) { cat in
+                            Text(cat.rawValue).tag(cat.rawValue)
+                        }
+                    }
+                } header: {
+                    Text("Logs")
+                }
+                
+                Section {
+                    if filteredLogs.isEmpty {
+                        Text("No logs captured yet. Try tapping Translate again.")
+                            .foregroundColor(.secondary)
+                    } else {
+                        ForEach(filteredLogs) { entry in
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(entry.formatted)
+                                    .font(.caption)
+                                    .textSelection(.enabled)
+                                Text("\(entry.shortFile):\(entry.line) \(entry.function)")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding(.vertical, 2)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Debug Console")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Close") { dismiss() }
+                }
+                ToolbarItemGroup(placement: .navigationBarTrailing) {
+                    Button("Refresh") { refreshLogs() }
+                    Button("Copy Logs") {
+                        UIPasteboard.general.string = DebugLogger.exportLogs()
+                    }
+                }
+            }
+            .task {
+                refreshLogs()
+            }
+        }
+    }
+    
+    private func refreshLogs() {
+        logs = DebugLogger.getRecentLogs(count: 200)
     }
 }
 

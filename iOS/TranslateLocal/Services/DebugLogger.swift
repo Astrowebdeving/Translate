@@ -6,7 +6,7 @@
 //
 
 import Foundation
-import os.log
+import os
 
 /// Centralized debug logger with categories
 enum DebugLogger {
@@ -23,6 +23,11 @@ enum DebugLogger {
         case appGroup = "AppGroup"
         case general = "General"
     }
+    
+    // So we can build pickers easily in the UI.
+    static let allCategories: [Category] = [
+        .translation, .model, .ocr, .screenTranslation, .pip, .broadcast, .appGroup, .general
+    ]
     
     // MARK: - Log Levels
     
@@ -100,6 +105,23 @@ enum DebugLogger {
         // Print to console
         print(entry.detailed)
         
+        // Also emit to Unified Logging so it shows up reliably in Xcode / Console.app.
+        // Filter in Console by subsystem: com.translatelocal
+        let logger = Logger(subsystem: "com.translatelocal", category: category.rawValue)
+        switch level {
+        case .debug:
+            logger.debug("\(entry.detailed, privacy: .public)")
+        case .info:
+            logger.info("\(entry.detailed, privacy: .public)")
+        case .warning:
+            logger.warning("\(entry.detailed, privacy: .public)")
+        case .error:
+            logger.error("\(entry.detailed, privacy: .public)")
+        case .success:
+            // No dedicated "success" level; log as info.
+            logger.info("\(entry.detailed, privacy: .public)")
+        }
+        
         // Store for in-app viewing
         logQueue.async {
             recentLogs.append(entry)
@@ -143,6 +165,24 @@ enum DebugLogger {
     
     static func broadcast(_ message: String, level: Level = .info) {
         log(message, category: .broadcast, level: level)
+    }
+    
+    // MARK: - Additional Category Shortcuts
+    
+    static func translation(_ message: String, level: Level = .info) {
+        log(message, category: .translation, level: level)
+    }
+    
+    static func model(_ message: String, level: Level = .info) {
+        log(message, category: .model, level: level)
+    }
+    
+    static func ocr(_ message: String, level: Level = .info) {
+        log(message, category: .ocr, level: level)
+    }
+    
+    static func general(_ message: String, level: Level = .info) {
+        log(message, category: .general, level: level)
     }
     
     // MARK: - Log Retrieval

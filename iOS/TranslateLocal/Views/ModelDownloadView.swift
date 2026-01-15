@@ -42,6 +42,15 @@ struct ModelDownloadView: View {
                 }
             }
             
+            // Gemma 3n (MLX) Section
+            Section {
+                GemmaDownloadRow()
+            } header: {
+                Text("Gemma 3n (Multilingual AI)")
+            } footer: {
+                Text("Gemma 3n supports all language pairs in a single model. Powered by MLX for on-device inference.")
+            }
+            
             // Available Models
             Section("Available for Download") {
                 ForEach(downloader.availableModels, id: \.id) { model in
@@ -73,9 +82,15 @@ struct ModelDownloadView: View {
             // Storage Info
             Section("Storage") {
                 HStack {
-                    Text("Used by models")
+                    Text("Opus-MT models")
                     Spacer()
                     Text(downloader.storageUsedFormatted)
+                        .foregroundColor(.secondary)
+                }
+                HStack {
+                    Text("MLX models (Gemma)")
+                    Spacer()
+                    Text(MLXModelManager.shared.storageUsedText)
                         .foregroundColor(.secondary)
                 }
             }
@@ -88,6 +103,89 @@ struct ModelDownloadView: View {
             Button("OK") { downloader.clearError() }
         } message: {
             Text(downloader.error ?? "Unknown error")
+        }
+    }
+}
+
+// MARK: - Gemma Download Row
+
+struct GemmaDownloadRow: View {
+    @State private var mlxManager = MLXModelManager.shared
+    @State private var showDeleteConfirmation = false
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Gemma 3n E2B")
+                        .font(.headline)
+                    Text("Any language pair • Smart translation")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                Spacer()
+                
+                if mlxManager.isDownloading {
+                    VStack(alignment: .trailing, spacing: 4) {
+                        ProgressView(value: mlxManager.downloadProgress)
+                            .frame(width: 60)
+                        Text(mlxManager.progressText)
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                } else if mlxManager.isGemmaReady {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.green)
+                        .font(.title2)
+                } else {
+                    Button {
+                        Task {
+                            try? await mlxManager.downloadGemma()
+                        }
+                    } label: {
+                        Image(systemName: "icloud.and.arrow.down")
+                            .font(.title2)
+                            .foregroundColor(.indigo)
+                    }
+                }
+            }
+            
+            if mlxManager.isGemmaReady {
+                HStack {
+                    Text(mlxManager.estimatedSizeText)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    Spacer()
+                    
+                    Button(role: .destructive) {
+                        showDeleteConfirmation = true
+                    } label: {
+                        Text("Delete")
+                            .font(.caption)
+                    }
+                }
+            } else if !mlxManager.isDownloading {
+                Text("~\(mlxManager.estimatedSizeText)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            
+            if !mlxManager.statusMessage.isEmpty && (mlxManager.isDownloading || mlxManager.error != nil) {
+                Text(mlxManager.statusMessage)
+                    .font(.caption2)
+                    .foregroundColor(mlxManager.error != nil ? .red : .secondary)
+            }
+        }
+        .padding(.vertical, 4)
+        .confirmationDialog("Delete Gemma Model?", isPresented: $showDeleteConfirmation, titleVisibility: .visible) {
+            Button("Delete", role: .destructive) {
+                try? mlxManager.deleteGemma()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This will free up ~\(mlxManager.estimatedSizeText) of storage. You can download it again later.")
         }
     }
 }
@@ -430,6 +528,9 @@ class ModelDownloadManager: NSObject, ObservableObject, URLSessionDownloadDelega
             downloadProgress = 1.0
             
             refresh()
+            
+            // Make newly downloaded models visible to the rest of the app immediately (no restart needed).
+            await ModelManager.shared.scanAvailableModels()
             
         } catch {
             DebugLogger.error("Download failed for \(model.displayName): \(error)", category: .model)

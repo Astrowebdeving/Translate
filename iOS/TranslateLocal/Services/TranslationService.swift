@@ -344,7 +344,11 @@ class TranslationService {
     
     // MARK: - Private Properties
     
+    // MARK: - Private Properties
+    
     private var models: [TranslationModelType: MLModel] = [:]
+    private var decoders: [TranslationModelType: MLModel] = [:] // Store decoders separately
+    private var tokenizers: [TranslationModelType: ModelTokenizer] = [:] // Store tokenizers
     private let modelManager: ModelManager
     private let processingQueue = DispatchQueue(label: "com.translatelocal.translation", qos: .userInitiated)
     
@@ -358,13 +362,42 @@ class TranslationService {
     
     /// Load a translation model
     func loadModel(_ type: TranslationModelType) async throws {
-        guard !loadedModels.contains(type) else { return }
+        DebugLogger.model("loadModel called for \(type.rawValue)", level: .debug)
+        guard !loadedModels.contains(type) else { 
+            DebugLogger.model("Model \(type.rawValue) already loaded", level: .debug)
+            return 
+        }
         
         do {
+            // Load encoder (standard model)
             let model = try await modelManager.loadModel(type)
             models[type] = model
+            
+            // For Opus-MT models, also load the decoder and tokenizer
+            // These types start with "OpusMT_"
+            if type.rawValue.starts(with: "OpusMT_") {
+                // Load decoder
+                let decoder = try await modelManager.loadDecoder(type)
+                decoders[type] = decoder
+                DebugLogger.model("Loaded decoder for \(type.displayName)", level: .info)
+                
+                // Load tokenizer
+                if let modelURL = modelManager.getModelURL(for: type) {
+                    // modelURL is .../OpusMT_zh_en_encoder.mlmodelc
+                    // Parent dir contains vocab.json
+                    let parentURL = modelURL.deletingLastPathComponent()
+                    let tokenizer = try ModelTokenizer(directory: parentURL)
+                    tokenizers[type] = tokenizer
+                    DebugLogger.model("Loaded tokenizer for \(type.displayName)", level: .info)
+                }
+            }
+            
             loadedModels.insert(type)
         } catch {
+            // Clean up if partial load failed
+            models.removeValue(forKey: type)
+            decoders.removeValue(forKey: type)
+            tokenizers.removeValue(forKey: type)
             throw TranslationError.modelLoadFailed(type.displayName)
         }
     }
@@ -372,6 +405,8 @@ class TranslationService {
     /// Unload a translation model to free memory
     func unloadModel(_ type: TranslationModelType) {
         models.removeValue(forKey: type)
+        decoders.removeValue(forKey: type)
+        tokenizers.removeValue(forKey: type)
         loadedModels.remove(type)
     }
     
@@ -388,8 +423,10 @@ class TranslationService {
         from sourceLanguage: Language,
         to targetLanguage: Language
     ) async throws -> TranslationResult {
+        DebugLogger.translation("translate() called: '\(text.prefix(30))' from \(sourceLanguage.id) to \(targetLanguage.id)", level: .info)
         
         guard !text.isEmpty else {
+            DebugLogger.translation("Empty input - throwing error", level: .warning)
             throw TranslationError.emptyInput
         }
         
@@ -401,19 +438,35 @@ class TranslationService {
         do {
             // Select best model for this language pair
             let modelType = selectModel(from: sourceLanguage, to: targetLanguage)
+            DebugLogger.translation("Selected model: \(modelType.rawValue)", level: .debug)
             
-            // Try to load model if available (but don't fail if not - demo mode will handle it)
-            if !loadedModels.contains(modelType) && modelManager.isModelAvailable(modelType) {
-                try? await loadModel(modelType)
+            // Check model availability via filesystem (ModelManager.availableModels can be stale until it rescans)
+            let isAvailable = modelManager.getModelURL(for: modelType) != nil
+            let isLoaded = loadedModels.contains(modelType)
+            DebugLogger.translation("Model \(modelType.rawValue): available=\(isAvailable), loaded=\(isLoaded)", level: .debug)
+            
+            // If the model is available on-device, it should be loadable.
+            // Failing to load should be surfaced (otherwise we can end up with silent empty output).
+            if !isLoaded && isAvailable {
+                DebugLogger.translation("Attempting to load model \(modelType.rawValue)", level: .debug)
+                try await loadModel(modelType)
+                DebugLogger.translation("Model loaded successfully", level: .info)
             }
             
+            DebugLogger.translation("Calling performTranslation", level: .debug)
             // Perform translation
-            let translatedText = try await performTranslation(
+            let translatedTextRaw = try await performTranslation(
                 text: text,
                 from: sourceLanguage,
                 to: targetLanguage,
                 using: modelType
             )
+            
+            let translatedText = translatedTextRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+            if translatedText.isEmpty {
+                DebugLogger.translation("Translation produced empty output (model=\(modelType.rawValue))", level: .error)
+                throw TranslationError.translationFailed("Model returned empty output. Check tokenizer/model files for \(modelType.rawValue).")
+            }
             
             let processingTime = Date().timeIntervalSince(startTime)
             
@@ -517,22 +570,53 @@ class TranslationService {
         to targetLanguage: Language,
         using modelType: TranslationModelType
     ) async throws -> String {
+        DebugLogger.translation("performTranslation called with model \(modelType.rawValue)", level: .debug)
         
-        // Check if model is loaded - if not, use demo translation
+        
+        // NEW: Use GemmaService via MLX when available for .gemma3n model type
+        if modelType == .gemma3n && GemmaService.shared.isLoaded {
+            DebugLogger.translation("Using GemmaService (MLX) for translation", level: .info)
+            return try await GemmaService.shared.translate(
+                text: text,
+                from: sourceLanguage.name,
+                to: targetLanguage.name
+            )
+        }
+        
+        // Try to load Gemma if it's the selected model and not yet loaded
+        if modelType == .gemma3n && MLXModelManager.shared.isGemmaReady && !GemmaService.shared.isLoaded {
+            do {
+                try await GemmaService.shared.loadModel()
+                DebugLogger.translation("Loaded GemmaService, retrying with MLX", level: .info)
+                return try await GemmaService.shared.translate(
+                    text: text,
+                    from: sourceLanguage.name,
+                    to: targetLanguage.name
+                )
+            } catch {
+                DebugLogger.translation("Failed to load GemmaService: \(error.localizedDescription)", level: .warning)
+                // Fall through to demo translation
+            }
+        }
+        
+        // Check if CoreML model is loaded - if not, use demo translation
+        DebugLogger.translation("Checking models dict for \\(modelType.rawValue). Keys: \\(Array(models.keys).map { $0.rawValue })", level: .debug)
         guard let model = models[modelType] else {
+            DebugLogger.translation("Model \\(modelType.rawValue) NOT in models dict - falling back to demo", level: .warning)
             // Provide demo translation when no models are available
             return try demoTranslation(text: text, from: sourceLanguage, to: targetLanguage)
         }
+        DebugLogger.translation("Model \\(modelType.rawValue) found in dict - proceeding with CoreML inference", level: .debug)
         
-        // This is a placeholder for actual model inference
-        // Real implementation would:
-        // 1. Tokenize input text
-        // 2. Create MLMultiArray input
-        // 3. Run model prediction
-        // 4. Decode output tokens
-
+        // CoreML-based translation (for Opus-MT models)
         let config = self.configuration
-        return try await withTimeout(10.0) {  // 10 second timeout for translation
+        #if targetEnvironment(simulator)
+        let timeoutSeconds: TimeInterval = 30.0
+        #else
+        let timeoutSeconds: TimeInterval = 10.0
+        #endif
+        
+        return try await withTimeout(timeoutSeconds) {  // Simulator can be much slower
             try await withCheckedThrowingContinuation { continuation in
                 self.processingQueue.async {
                     do {
@@ -620,44 +704,368 @@ class TranslationService {
         text: String,
         configuration: TranslationConfiguration
     ) throws -> String {
-        // Tokenize
-        let tokens = tokenize(text)
-        
-        // Create encoder input
-        let inputArray = try MLMultiArray(shape: [1, NSNumber(value: tokens.count)], dataType: .int32)
-        for (index, token) in tokens.enumerated() {
-            inputArray[index] = NSNumber(value: token)
+        // Find associated tokenizer and decoder
+        // We look up based on the model instance (associated with the key in our dict)
+        guard let modelType = models.first(where: { $0.value === model })?.key,
+              let tokenizer = tokenizers[modelType],
+              let decoder = decoders[modelType] else {
+            // Need to verify why dependencies are missing
+            if tokenizers.isEmpty {
+                DebugLogger.translation("No tokenizers available. Ensure model loaded correctly.", level: .error)
+            }
+            throw TranslationError.modelNotLoaded("Tokenizer/Decoder")
         }
         
-        // Create attention mask
-        let attentionMask = try MLMultiArray(shape: [1, NSNumber(value: tokens.count)], dataType: .int32)
-        for i in 0..<tokens.count {
-            attentionMask[i] = 1
+        // 1. Tokenize
+        let inputTokens = tokenizer.tokenize(text)
+        DebugLogger.translation("Input Tokens: \(inputTokens)", level: .debug)
+        if inputTokens.isEmpty {
+            DebugLogger.translation("Tokenizer returned 0 tokens for non-empty input", level: .error)
+            throw TranslationError.translationFailed("Tokenizer returned 0 tokens. This usually means vocab/tokenizer files don't match the model.")
         }
         
-        // Create initial decoder input (start token)
-        let decoderInput = try MLMultiArray(shape: [1, 1], dataType: .int32)
-        decoderInput[0] = 0  // Decoder start token ID
+        // Quick sanity: show first few vocab pieces for input (helps diagnose vocab mismatch)
+        if inputTokens.count > 0 {
+            let preview = inputTokens.prefix(12).map { tid -> String in
+                let id = Int(tid)
+                // Access internal mapping via detokenize trick is expensive; instead just show IDs here.
+                // (We log IDs since vocab JSON is huge; IDs are still actionable.)
+                return String(id)
+            }.joined(separator: ",")
+            DebugLogger.translation("Input token id preview: [\(preview)]", level: .debug)
+        }
         
-        // Run inference
-        let input = try MLDictionaryFeatureProvider(dictionary: [
-            "input_ids": inputArray,
-            "attention_mask": attentionMask,
-            "decoder_input_ids": decoderInput
+        let batchSize = 1
+        let seqLen = inputTokens.count
+        let maxLen = tokenizer.config.max_length
+        let padToken = Int32(tokenizer.config.pad_token_id)
+        
+        // 2. Encoder Inference
+        // Create encoder inputs
+        // NOTE: These CoreML models were traced with max_length=512. Even if they declare RangeDim,
+        // Torch tracing can bake in shape assumptions. We pad to fixed length to keep encoder/decoder stable.
+        let encoderInputIds = try MLMultiArray(shape: [NSNumber(value: batchSize), NSNumber(value: maxLen)], dataType: .int32)
+        let attentionMaskMultiArray = try MLMultiArray(shape: [NSNumber(value: batchSize), NSNumber(value: maxLen)], dataType: .int32)
+        
+        // Initialize with PAD + 0 mask
+        for i in 0..<maxLen {
+            encoderInputIds[i] = NSNumber(value: padToken)
+            attentionMaskMultiArray[i] = 0
+        }
+        
+        // Fill prefix with real tokens
+        let usedLen = min(seqLen, maxLen)
+        for i in 0..<usedLen {
+            encoderInputIds[i] = NSNumber(value: inputTokens[i])
+            attentionMaskMultiArray[i] = 1
+        }
+        
+        // Try dictionary inputs - check model description if possible
+        // Standard HuggingFace export names: input_ids, attention_mask
+        let encoderInput = try MLDictionaryFeatureProvider(dictionary: [
+            "input_ids": encoderInputIds,
+            "attention_mask": attentionMaskMultiArray
         ])
         
-        let output = try model.prediction(from: input)
+        // Run Encoder
+        DebugLogger.translation("Running Encoder for \(modelType.rawValue)", level: .debug)
+        let encoderOutput = try model.prediction(from: encoderInput)
+        DebugLogger.translation("Encoder Output Features: \(encoderOutput.featureNames)", level: .debug)
         
-        // Decode output
-        guard let logits = output.featureValue(for: "logits")?.multiArrayValue else {
+        // Extract encoder hidden state (usually 'last_hidden_state' or 'var_...' or 'linear_...')
+        // We iterate features to find the large tensor, likely the last hidden state
+        let hiddenStateName = encoderOutput.featureNames.first { $0.contains("hidden_state") || $0.contains("encoder_hidden") }
+            ?? encoderOutput.featureNames.first(where: { name in
+                guard let value = encoderOutput.featureValue(for: name)?.multiArrayValue else { return false }
+                return value.shape.count == 3 // [batch, seq, hidden_dim]
+            }) 
+            ?? "encoder_hidden_states"
+            
+        guard let encoderHiddenStateRaw = encoderOutput.featureValue(for: hiddenStateName)?.multiArrayValue else {
+            DebugLogger.translation("Could not find encoder hidden states in output: \(encoderOutput.featureNames)", level: .error)
             throw TranslationError.invalidModelOutput
         }
         
-        let outputTokens = greedyDecode(logits: logits, maxLength: configuration.maxInputLength)
-        return detokenize(outputTokens)
+        DebugLogger.translation("Encoder Hidden Raw: Shape \(encoderHiddenStateRaw.shape), Type \(encoderHiddenStateRaw.dataType.rawValue)", level: .debug)
+        
+        // Ensure encoder hidden state is FP32 (Decoder expects FP32)
+        // Some encoders output FP16 (Float16)
+        let encoderHiddenState = try convertToFP32(encoderHiddenStateRaw)
+        DebugLogger.translation("Encoder Hidden Converted: Shape \(encoderHiddenState.shape), Type \(encoderHiddenState.dataType.rawValue)", level: .debug)
+        
+        // 3. Decoder Loop (Greedy Search)
+        // Use correct start token from config
+        let startToken = Int32(tokenizer.config.decoder_start_token_id)
+        let eosToken = Int32(tokenizer.config.eos_token_id)
+        
+        var outputTokens: [Int32] = [startToken] 
+        
+        DebugLogger.translation("Starting Decoder Loop. Start: \(startToken), EOS: \(eosToken)", level: .debug)
+        
+        // Decoder output length cap: keep UI responsive.
+        #if targetEnvironment(simulator)
+        let maxDecodeSteps = min(48, tokenizer.config.max_length)
+        let decodeTimeBudgetSeconds: TimeInterval = 6.0
+        #else
+        let maxDecodeSteps = min(128, tokenizer.config.max_length)
+        let decodeTimeBudgetSeconds: TimeInterval = 12.0
+        #endif
+        
+        let decodeStart = Date()
+        var bigramCounts: [UInt64: Int] = [:]
+        
+        var hadInvalidLogits = false
+        
+        for step in 0..<maxDecodeSteps {
+            if Date().timeIntervalSince(decodeStart) > decodeTimeBudgetSeconds {
+                DebugLogger.translation("Stopping decode early (time budget exceeded). steps=\(step)", level: .warning)
+                break
+            }
+            
+            let lastToken = outputTokens.last!
+            // EOS check
+            if lastToken == eosToken { 
+                DebugLogger.translation("Hit EOS at step \(step)", level: .debug)
+                break 
+            } 
+            
+            // Prepare Decoder Input
+            let currentSeqLen = outputTokens.count
+            
+            // IMPORTANT:
+            // Although the CoreML model declares RangeDim(1, 512), these decoder exports were traced and
+            // often only behave correctly when fed a fixed length sequence (512). Using a shorter
+            // `decoder_input_ids` can yield NaN/-inf logits on Simulator and sometimes even on device.
+            // So we keep the decoder_input_ids shape fixed to maxLen and pad with pad_token_id.
+            let usedDecoderLen = min(currentSeqLen, maxLen)
+            let decoderInputIds = try MLMultiArray(shape: [NSNumber(value: batchSize), NSNumber(value: maxLen)], dataType: .int32)
+            for i in 0..<maxLen {
+                decoderInputIds[i] = NSNumber(value: padToken)
+            }
+            for i in 0..<usedDecoderLen {
+                decoderInputIds[i] = NSNumber(value: outputTokens[i])
+            }
+            
+            // Decoder inputs: decoder_input_ids (or input_ids), encoder_hidden_states, encoder_attention_mask
+            let tokenInputName = decoder.modelDescription.inputDescriptionsByName.keys.contains("decoder_input_ids") ? "decoder_input_ids" : "input_ids"
+            
+            let decoderInput = try MLDictionaryFeatureProvider(dictionary: [
+                tokenInputName: decoderInputIds,
+                "encoder_hidden_states": encoderHiddenState,
+                "encoder_attention_mask": attentionMaskMultiArray
+            ])
+            
+        // Run Decoder
+            let decoderOutput = try decoder.prediction(from: decoderInput)
+            
+            // Extract logits
+            let logitsName = decoderOutput.featureNames.first { $0.contains("logits") } ?? "logits"
+            guard let logits = decoderOutput.featureValue(for: logitsName)?.multiArrayValue else {
+                DebugLogger.translation("No logits found in decoder output", level: .error)
+                break 
+            }
+        
+        if step == 0 {
+            DebugLogger.translation("Decoder logits shape: \(logits.shape.map { $0.intValue }), type=\(logits.dataType.rawValue)", level: .debug)
+        }
+            
+        // Greedy select next token from LAST position in logits.
+        // Depending on conversion, logits can be:
+        // - [1, seqLen, vocab]
+        // - [seqLen, vocab]
+        // - [1, vocab]   (when traced with seqLen=1, some converters squeeze)
+        // - [vocab]
+        let shape = logits.shape.map { $0.intValue }
+        let vocabSize: Int
+        // Even though logits may have seqLen=maxLen, we want the logits corresponding to the last real token.
+        let lastIdx = usedDecoderLen - 1
+            
+            var maxProb: Float = -Float.infinity
+            var nextToken: Int32 = 0
+            
+            // Efficiently find max (use raw buffer reads so Float16 logits work correctly)
+        func valueAt(v: Int) -> Float {
+            switch shape.count {
+            case 3:
+                return readFloat(logits, indices: [0, lastIdx, v])
+            case 2:
+                // Could be [seqLen, vocab] or [1, vocab]
+                if shape[0] == 1 {
+                    return readFloat(logits, indices: [0, v])
+                } else {
+                    return readFloat(logits, indices: [lastIdx, v])
+                }
+            case 1:
+                return readFloat(logits, indices: [v])
+            default:
+                return -Float.infinity
+            }
+        }
+        
+        if shape.count >= 1 {
+            vocabSize = shape.last ?? 0
+        } else {
+            vocabSize = 0
+        }
+        
+        if vocabSize == 0 {
+            DebugLogger.translation("Invalid logits shape: \(shape)", level: .error)
+            break
+        }
+        
+        for v in 0..<vocabSize {
+            let val = valueAt(v: v)
+            if val.isNaN { continue }
+            if val > maxProb {
+                maxProb = val
+                nextToken = Int32(v)
+            }
+        }
+        
+        if maxProb == -Float.infinity {
+            hadInvalidLogits = true
+            DebugLogger.translation("Decoder produced only NaN/-inf logits (shape=\(shape)). Aborting decode.", level: .error)
+            break
+        }
+        
+        if step == 0 {
+            DebugLogger.translation("Step0 argmax token=\(nextToken) score=\(maxProb)", level: .debug)
+        }
+            
+            // DebugLogger.translation("Step \(step): Token \(nextToken) (Prob \(maxProb))", level: .debug)
+            
+            outputTokens.append(nextToken)
+            
+            // Repetition guard: stop if we get stuck in a loop (common with greedy decoding).
+            if outputTokens.count >= 2 {
+                let a = UInt32(bitPattern: outputTokens[outputTokens.count - 2])
+                let b = UInt32(bitPattern: outputTokens[outputTokens.count - 1])
+                let key = (UInt64(a) << 32) | UInt64(b)
+                let newCount = (bigramCounts[key] ?? 0) + 1
+                bigramCounts[key] = newCount
+                #if targetEnvironment(simulator)
+                let repeatThreshold = 3
+                #else
+                let repeatThreshold = 6
+                #endif
+                if newCount >= repeatThreshold {
+                    DebugLogger.translation("Stopping decode early (repetition loop detected). bigram=(\(a),\(b))", level: .warning)
+                    break
+                }
+            }
+            
+            // Special-case common alternation loop: ", X, X" patterns like "Money, money, money..."
+            // If we detect [comma, w, comma, w] we stop early and return the partial translation.
+            if outputTokens.count >= 5 {
+                let t1 = outputTokens[outputTokens.count - 4]
+                let t2 = outputTokens[outputTokens.count - 3]
+                let t3 = outputTokens[outputTokens.count - 2]
+                let t4 = outputTokens[outputTokens.count - 1]
+                // Token id 2 is "," in your vocab (seen in logs).
+                if t1 == 2 && t3 == 2 && t2 == t4 {
+                    DebugLogger.translation("Stopping decode early (alternating repetition detected). pattern=[2,\(t2),2,\(t4)]", level: .warning)
+                    break
+                }
+            }
+            
+            // Secondary EOS check
+            if nextToken == eosToken { 
+                DebugLogger.translation("Hit EOS (Secondary) at step \(step)", level: .debug)
+                break 
+            }
+        }
+        
+        DebugLogger.translation("Final Output Tokens: \(outputTokens)", level: .debug)
+        
+        // 4. Detokenize
+        let decoded = tokenizer.detokenize(outputTokens)
+        if hadInvalidLogits {
+            // Provide a more actionable error, but after logging final tokens/detokenize.
+            throw TranslationError.translationFailed(
+                "Opus‑MT model produced invalid logits. This can happen on iOS Simulator with MLProgram float16 models. Try a real device or re-convert with FLOAT32 precision (and ideally export last-token logits)."
+            )
+        }
+        return decoded
     }
     
-    // MARK: - Tokenization (Placeholder implementations)
+    // MARK: - Helpers
+    
+    private func convertToFP32(_ input: MLMultiArray) throws -> MLMultiArray {
+        if input.dataType == .float32 { return input }
+        
+        let output = try MLMultiArray(shape: input.shape, dataType: .float32)
+        let count = input.count
+        
+        switch input.dataType {
+        case .float16:
+            // Decode IEEE 754 halfs from raw storage
+            let src = input.dataPointer.bindMemory(to: UInt16.self, capacity: count)
+            let dst = output.dataPointer.bindMemory(to: Float.self, capacity: count)
+            for i in 0..<count {
+                dst[i] = Float(Float16(bitPattern: src[i]))
+            }
+        case .double:
+            let src = input.dataPointer.bindMemory(to: Double.self, capacity: count)
+            let dst = output.dataPointer.bindMemory(to: Float.self, capacity: count)
+            for i in 0..<count {
+                dst[i] = Float(src[i])
+            }
+        case .int32:
+            let src = input.dataPointer.bindMemory(to: Int32.self, capacity: count)
+            let dst = output.dataPointer.bindMemory(to: Float.self, capacity: count)
+            for i in 0..<count {
+                dst[i] = Float(src[i])
+            }
+        default:
+            // Fallback (slower)
+            for i in 0..<count {
+                output[i] = NSNumber(value: input[i].floatValue)
+            }
+        }
+        
+        return output
+    }
+
+    /// Read a single element from an MLMultiArray as Float, correctly handling Float16.
+    private func readFloat(_ array: MLMultiArray, indices: [Int]) -> Float {
+        // Compute flat offset using strides
+        let strides = array.strides.map { $0.intValue }
+        var offset = 0
+        for (i, idx) in indices.enumerated() {
+            offset += idx * strides[i]
+        }
+
+        switch array.dataType {
+        case .float32:
+            let ptr = array.dataPointer.bindMemory(to: Float.self, capacity: array.count)
+            return ptr[offset]
+        case .float16:
+            // MLMultiArray stores float16 as 16-bit IEEE 754; decode via bitPattern to avoid NaN mishaps.
+            let ptr = array.dataPointer.bindMemory(to: UInt16.self, capacity: array.count)
+            return Float(Float16(bitPattern: ptr[offset]))
+        case .double:
+            let ptr = array.dataPointer.bindMemory(to: Double.self, capacity: array.count)
+            return Float(ptr[offset])
+        default:
+            // Fallback (slower) path
+            return array[offset].floatValue
+        }
+    }
+    
+    // MARK: - Debug Helpers
+    
+    private func debugPrintInputDescription(model: MLModel, name: String) {
+        let inputs = model.modelDescription.inputDescriptionsByName
+        var log = "\(name) Inputs: "
+        for (key, feature) in inputs {
+            log += "\(key) (\(feature.type)), "
+        }
+        DebugLogger.translation(log, level: .debug)
+    }
+    
+    // MARK: - Legacy / Unused Logic
+    
+    // Legacy methods required for Gemma inference path (until that is refactored)
     
     private func tokenize(_ text: String) -> [Int32] {
         // Placeholder - real implementation would use SentencePiece or similar
@@ -717,7 +1125,21 @@ class TranslationService {
 
     /// Provides basic demo message when no models are available
     private func demoTranslation(text: String, from source: Language, to target: Language) throws -> String {
-        return "[Demo Mode] No AI models installed. Download models from the Translate tab to enable real translation.\n\nOriginal: \(text)"
+        // Log that demo mode is being used
+        DebugLogger.translation("Using demo translation - no models available", level: .warning)
+        
+        return """
+        ⚠️ Demo Mode
+        
+        No translation models are installed yet.
+        
+        To enable real translation:
+        1. Go to Settings → Models
+        2. Download Opus-MT or Gemma AI models
+        3. Come back here and try again!
+        
+        Your text: "\(text)"
+        """
     }
     
     // MARK: - Smart Positioning Translation (Gemma 3n E2B)

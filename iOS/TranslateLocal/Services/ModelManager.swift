@@ -121,27 +121,39 @@ class ModelManager {
                 models[type] = info
             }
             
-            // Check downloaded models
-            let downloadedURL = modelDirectory.appendingPathComponent("\(type.rawValue).mlmodelc")
-            if fileManager.fileExists(atPath: downloadedURL.path) {
-                let info = createModelInfo(for: type, at: downloadedURL, isBundled: false)
-                models[type] = info
+            // Check downloaded models using findModelURL which handles all path formats
+            if let modelURL = findModelURL(for: type) {
+                // Avoid duplicating bundled models
+                if models[type] == nil || !models[type]!.isBundled {
+                    let info = createModelInfo(for: type, at: modelURL, isBundled: false)
+                    models[type] = info
+                    DebugLogger.model("Discovered model \(type.rawValue) at \(modelURL.path)", level: .info)
+                }
             }
         }
         
         self.availableModels = models
+        DebugLogger.model("Scan complete. Found \(models.count) available models", level: .info)
     }
     
     private func createModelInfo(for type: TranslationModelType, at url: URL, isBundled: Bool) -> ModelInfo {
-        // Get file size
-        let size: Int64
-        if let attrs = try? fileManager.attributesOfItem(atPath: url.path),
-           let fileSize = attrs[.size] as? Int64 {
-            size = fileSize
-        } else {
-            // Calculate directory size for mlpackage/mlmodelc
-            size = calculateDirectorySize(at: url)
-        }
+        // Get file size.
+        // IMPORTANT: .mlmodelc and .mlpackage are directories; `attributesOfItem(.size)` often returns
+        // the directory entry size (~224 bytes) rather than the real on-disk footprint.
+        let size: Int64 = {
+            let isBundleDir = (url.pathExtension == "mlmodelc" || url.pathExtension == "mlpackage")
+            let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
+            if isBundleDir || isDirectory {
+                return calculateDirectorySize(at: url)
+            }
+            
+            if let attrs = try? fileManager.attributesOfItem(atPath: url.path),
+               let fileSize = attrs[.size] as? Int64 {
+                return fileSize
+            }
+            
+            return calculateDirectorySize(at: url)
+        }()
         
         return ModelInfo(
             id: type.rawValue,
@@ -198,7 +210,13 @@ class ModelManager {
         do {
             // Configure for optimal performance
             let config = MLModelConfiguration()
+            #if targetEnvironment(simulator)
+            // Simulator: prefer CPU for correctness (GPU/Metal paths can yield NaNs for MLProgram float16).
+            config.computeUnits = .cpuOnly
+            DebugLogger.model("Loading \(type.rawValue) with computeUnits=cpuOnly (simulator)", level: .debug)
+            #else
             config.computeUnits = .all  // Use Neural Engine when available
+            #endif
             
             // Load model
             let model = try await MLModel.load(contentsOf: modelURL, configuration: config)
@@ -237,16 +255,93 @@ class ModelManager {
             return url
         }
         
-        // Check downloaded models
-        let downloadedURL = modelDirectory.appendingPathComponent("\(type.rawValue).mlmodelc")
-        if fileManager.fileExists(atPath: downloadedURL.path) {
-            return downloadedURL
+        // Check downloaded models - using download ID mapping
+        let downloadId = downloadIdForType(type)
+        let modelDir = modelDirectory.appendingPathComponent(downloadId)
+        
+        // Structure: opus-zh-en/OpusMT_zh_en/OpusMT_zh_en_encoder.mlmodelc
+        let innerDir = modelDir.appendingPathComponent(type.rawValue)
+        let encoderPath = innerDir.appendingPathComponent("\(type.rawValue)_encoder.mlmodelc")
+        if fileManager.fileExists(atPath: encoderPath.path) {
+            return encoderPath // Return the specific encoder model
+        }
+        
+        // Also check direct encoder path without nested directory
+        let directEncoderPath = modelDir.appendingPathComponent("\(type.rawValue)_encoder.mlmodelc")
+        if fileManager.fileExists(atPath: directEncoderPath.path) {
+            return directEncoderPath
+        }
+        
+        // Fallback checks
+        let legacyPath = modelDirectory.appendingPathComponent("\(type.rawValue).mlmodelc")
+        if fileManager.fileExists(atPath: legacyPath.path) {
+            return legacyPath
         }
         
         return nil
     }
     
+    private func findDecoderURL(for type: TranslationModelType) -> URL? {
+        let downloadId = downloadIdForType(type)
+        let modelDir = modelDirectory.appendingPathComponent(downloadId)
+        
+        // Structure: opus-zh-en/OpusMT_zh_en/OpusMT_zh_en_decoder.mlmodelc
+        let innerDir = modelDir.appendingPathComponent(type.rawValue)
+        let decoderPath = innerDir.appendingPathComponent("\(type.rawValue)_decoder.mlmodelc")
+        if fileManager.fileExists(atPath: decoderPath.path) {
+            return decoderPath
+        }
+        
+        // Also check direct decoder path
+        let directDecoderPath = modelDir.appendingPathComponent("\(type.rawValue)_decoder.mlmodelc")
+        if fileManager.fileExists(atPath: directDecoderPath.path) {
+            return directDecoderPath
+        }
+        
+        return nil
+    }
+    
+    /// Load the decoder model for an encoder-decoder pair
+    func loadDecoder(_ type: TranslationModelType) async throws -> MLModel {
+        guard let url = findDecoderURL(for: type) else {
+            throw ModelManagerError.modelNotFound("\(type.rawValue) Decoder")
+        }
+        
+        let config = MLModelConfiguration()
+        #if targetEnvironment(simulator)
+        config.computeUnits = .cpuOnly
+        DebugLogger.model("Loading \(type.rawValue) decoder with computeUnits=cpuOnly (simulator)", level: .debug)
+        #else
+        config.computeUnits = .all
+        #endif
+        
+        return try await MLModel.load(contentsOf: url, configuration: config)
+    }
+    
+    /// Map TranslationModelType to download ID used by CoreMLModelDownloader
+    /// e.g., OpusMT_zh_en -> opus-zh-en
+    private func downloadIdForType(_ type: TranslationModelType) -> String {
+        let raw = type.rawValue
+        
+        // Handle Opus-MT models: OpusMT_xx_yy -> opus-xx-yy
+        if raw.hasPrefix("OpusMT_") {
+            let langPart = raw.replacingOccurrences(of: "OpusMT_", with: "")
+            let parts = langPart.split(separator: "_")
+            if parts.count == 2 {
+                return "opus-\(parts[0])-\(parts[1])"
+            }
+        }
+        
+        // Default: lowercase with dashes
+        return raw.lowercased().replacingOccurrences(of: "_", with: "-")
+    }
+    
     // MARK: - Model Download
+    
+    /// Get the local URL for a model (public wrapper for findModelURL)
+    func getModelURL(for type: TranslationModelType) -> URL? {
+        return findModelURL(for: type)
+    }
     
     /// Download a model from remote server
     func downloadModel(_ type: TranslationModelType, from url: URL) async throws {

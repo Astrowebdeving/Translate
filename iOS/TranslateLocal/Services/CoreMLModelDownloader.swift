@@ -355,6 +355,9 @@ class CoreMLModelDownloader {
             // Update downloaded models
             downloadedModels.insert(model.id)
             
+            // Ensure the ModelManager rescans immediately so Settings/Translate can load without restart.
+            await ModelManager.shared.scanAvailableModels()
+            
             isDownloading = false
             currentDownload = nil
             downloadProgress = 1.0

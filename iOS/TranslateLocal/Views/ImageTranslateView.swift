@@ -20,6 +20,12 @@ struct ImageTranslateView: View {
     @State private var showingCamera = false
     @State private var viewMode: ViewMode = .overlay
     
+    // Error and debug feedback
+    @State private var showingError = false
+    @State private var errorMessage = ""
+    @State private var showingDebugInfo = false
+    @State private var processingStatus = ""
+    
     enum ViewMode: String, CaseIterable {
         case overlay = "Overlay"
         case sideBySide = "Side by Side"
@@ -109,6 +115,14 @@ struct ImageTranslateView: View {
                         Image(systemName: "plus")
                     }
                 }
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button {
+                        showingDebugInfo = true
+                    } label: {
+                        Image(systemName: "ladybug")
+                            .foregroundColor(.orange)
+                    }
+                }
             }
             .onChange(of: selectedItem) { _, newItem in
                 Task {
@@ -124,6 +138,26 @@ struct ImageTranslateView: View {
                         await processImage()
                     }
                 }
+            }
+            .alert("Error", isPresented: $showingError) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(errorMessage)
+            }
+            .alert("Debug Info", isPresented: $showingDebugInfo) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("""
+                📸 Image Translation Status
+                
+                Blocks found: \(recognizedBlocks.count)
+                Blocks translated: \(translatedTexts.count)
+                
+                Models available: \(MLXModelManager.shared.isGemmaReady ? "Gemma ✅" : "No models")
+                OCR ready: ✅
+                
+                Status: \(processingStatus.isEmpty ? "Ready" : processingStatus)
+                """)
             }
         }
         .navigationViewStyle(.stack)  // Fix for iPad navigation issues
@@ -344,6 +378,7 @@ struct ImageTranslateView: View {
         
         await MainActor.run {
             isProcessing = true
+            processingStatus = "Starting OCR..."
             recognizedBlocks = []
             translatedTexts = [:]
             fullTranslation = ""
@@ -351,14 +386,30 @@ struct ImageTranslateView: View {
         
         do {
             // Run OCR
+            await MainActor.run { processingStatus = "Recognizing text..." }
             let result = try await appState.ocrService.recognizeText(from: image)
             
             await MainActor.run {
                 recognizedBlocks = result.textBlocks
+                processingStatus = "Found \(result.textBlocks.count) text blocks"
+            }
+            
+            if result.textBlocks.isEmpty {
+                await MainActor.run {
+                    isProcessing = false
+                    processingStatus = "No text found in image"
+                    errorMessage = "No text was detected in this image. Try with a clearer image or one that contains visible text."
+                    showingError = true
+                }
+                return
             }
             
             // Translate each block
-            for block in result.textBlocks {
+            for (index, block) in result.textBlocks.enumerated() {
+                await MainActor.run { 
+                    processingStatus = "Translating \(index + 1)/\(result.textBlocks.count)..." 
+                }
+                
                 let translation = try await appState.translationService.translate(
                     text: block.text,
                     from: appState.sourceLanguage,
@@ -374,12 +425,16 @@ struct ImageTranslateView: View {
             await MainActor.run {
                 fullTranslation = recognizedBlocks.compactMap { translatedTexts[$0.id] }.joined(separator: "\n")
                 isProcessing = false
+                processingStatus = "Done! Translated \(translatedTexts.count) blocks"
             }
             
         } catch {
-            print("Processing error: \(error)")
+            DebugLogger.general("Image processing error: \(error.localizedDescription)", level: .error)
             await MainActor.run {
                 isProcessing = false
+                processingStatus = "Error occurred"
+                errorMessage = "Failed to process image: \(error.localizedDescription)"
+                showingError = true
             }
         }
     }
