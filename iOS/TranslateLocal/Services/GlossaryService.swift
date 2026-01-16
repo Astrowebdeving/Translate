@@ -117,6 +117,10 @@ enum DetectedTermType: String {
 @MainActor @Observable
 class GlossaryService {
     
+    // MARK: - Singleton
+    
+    static let shared = GlossaryService()
+    
     // MARK: - Observable Properties
     
     private(set) var entries: [GlossaryEntry] = []
@@ -205,6 +209,47 @@ class GlossaryService {
     
     // MARK: - Translation Application
     
+    /// Get unique glossary entries that appear in the text
+    func getApplicableEntries(
+        for text: String,
+        sourceLanguage: String? = nil
+    ) -> [GlossaryEntry] {
+        // Filter by language first
+        let potentialEntries = entries.filter { entry in
+            guard entry.isEnabled else { return false }
+            
+            if let sourceLang = sourceLanguage,
+               let entrySourceLang = entry.sourceLanguage,
+               sourceLang != entrySourceLang {
+                return false
+            }
+            return true
+        }
+        
+        var foundEntries: [GlossaryEntry] = []
+        
+        for entry in potentialEntries {
+            let searchText = entry.isCaseSensitive ? entry.sourceText : entry.sourceText.lowercased()
+            let compareText = entry.isCaseSensitive ? text : text.lowercased()
+            
+            // Basic contain check first for speed
+            if compareText.contains(searchText) {
+                // Regex check for exact word boundary match
+                let pattern = "\\b\(NSRegularExpression.escapedPattern(for: entry.sourceText))\\b"
+                let options: NSRegularExpression.Options = entry.isCaseSensitive ? [] : .caseInsensitive
+                
+                if let regex = try? NSRegularExpression(pattern: pattern, options: options) {
+                    let range = NSRange(text.startIndex..., in: text)
+                    if regex.numberOfMatches(in: text, range: range) > 0 {
+                        foundEntries.append(entry)
+                    }
+                }
+            }
+        }
+        
+        return foundEntries
+    }
+    
     /// Apply glossary to text before/after translation
     func applyGlossary(
         to text: String,
@@ -215,23 +260,16 @@ class GlossaryService {
         var result = text
         var applied: [GlossaryEntry] = []
         
-        // Get applicable entries
-        let applicableEntries = entries.filter { entry in
-            guard entry.isEnabled else { return false }
-            
-            // Check language match if specified
-            if let sourceLang = sourceLanguage,
-               let entrySourceLang = entry.sourceLanguage,
-               sourceLang != entrySourceLang {
-                return false
-            }
-            
+        // Use our new helper to find entries
+        let baseEntries = getApplicableEntries(for: text, sourceLanguage: sourceLanguage)
+        
+        // Additional filter for target language if needed
+        let applicableEntries = baseEntries.filter { entry in
             if let targetLang = targetLanguage,
                let entryTargetLang = entry.targetLanguage,
                targetLang != entryTargetLang {
                 return false
             }
-            
             return true
         }
         
@@ -240,26 +278,25 @@ class GlossaryService {
             $0.sourceText.count > $1.sourceText.count
         }
         
-        // Apply each entry
+        // Apply replacements
         for entry in sortedEntries {
-            let searchText = entry.isCaseSensitive ? entry.sourceText : entry.sourceText.lowercased()
-            let compareText = entry.isCaseSensitive ? result : result.lowercased()
+            let pattern = "\\b\(NSRegularExpression.escapedPattern(for: entry.sourceText))\\b"
+            let options: NSRegularExpression.Options = entry.isCaseSensitive ? [] : .caseInsensitive
             
-            if compareText.contains(searchText) {
-                // Use word boundaries for better matching
-                let pattern = "\\b\(NSRegularExpression.escapedPattern(for: entry.sourceText))\\b"
-                let options: NSRegularExpression.Options = entry.isCaseSensitive ? [] : .caseInsensitive
+            if let regex = try? NSRegularExpression(pattern: pattern, options: options) {
+                let range = NSRange(result.startIndex..., in: result)
+                // Perform replacement
+                let newResult = regex.stringByReplacingMatches(
+                    in: result,
+                    range: range,
+                    withTemplate: entry.targetText
+                )
                 
-                if let regex = try? NSRegularExpression(pattern: pattern, options: options) {
-                    let range = NSRange(result.startIndex..., in: result)
-                    let matches = regex.numberOfMatches(in: result, range: range)
-                    
-                    if matches > 0 {
-                        result = regex.stringByReplacingMatches(
-                            in: result,
-                            range: range,
-                            withTemplate: entry.targetText
-                        )
+                // Track if actually changed
+                if newResult != result {
+                    result = newResult
+                    // Only add unique entries to wrapped result
+                    if !applied.contains(where: { $0.id == entry.id }) {
                         applied.append(entry)
                     }
                 }

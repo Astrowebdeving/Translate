@@ -146,9 +146,27 @@ class GemmaService {
         
         // Build translation prompt
         // Build translation prompt using Gemma 3n chat format
+        // Check for glossary entries
+        let glossaryEntries = GlossaryService.shared.getApplicableEntries(for: text)
+        var glossaryContext = ""
+        
+        if !glossaryEntries.isEmpty {
+            let terms = glossaryEntries.map { "- \($0.sourceText) -> \($0.targetText)" }.joined(separator: "\n")
+            glossaryContext = """
+            
+            Use these specific translations:
+            \(terms)
+            """
+            
+            // Log that we're using glossary
+            DebugLogger.translation("Using \(glossaryEntries.count) glossary entries", level: .info)
+            GlossaryService.shared.batchIncrementUsage(for: glossaryEntries)
+        }
+        
+        // Build translation prompt using Gemma 3n chat format
         let prompt = """
         <start_of_turn>user
-        Translate the following text from \(sourceLanguage) to \(targetLanguage). Output only the translation, nothing else.
+        Translate the following text from \(sourceLanguage) to \(targetLanguage). Output only the translation, nothing else.\(glossaryContext)
         
         Text: \(text)<end_of_turn>
         <start_of_turn>model

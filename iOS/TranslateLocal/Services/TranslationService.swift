@@ -605,7 +605,19 @@ class TranslationService {
         guard let model = models[modelType] else {
             DebugLogger.translation("Model \\(modelType.rawValue) NOT in models dict - falling back to demo", level: .warning)
             // Provide demo translation when no models are available
-            return try demoTranslation(text: text, from: sourceLanguage, to: targetLanguage)
+            let demoResult = try demoTranslation(text: text, from: sourceLanguage, to: targetLanguage)
+            // Apply glossary post-translation (Opus/Demo models don't handle prompt instructions well)
+            let (finalText, applied) = GlossaryService.shared.applyGlossary(
+                to: demoResult,
+                sourceLanguage: sourceLanguage.id,
+                targetLanguage: targetLanguage.id,
+                phase: .postTranslation
+            )
+            if !applied.isEmpty {
+                DebugLogger.translation("Applied \(applied.count) glossary terms post-translation", level: .info)
+                GlossaryService.shared.batchIncrementUsage(for: applied)
+            }
+            return finalText
         }
         DebugLogger.translation("Model \\(modelType.rawValue) found in dict - proceeding with CoreML inference", level: .debug)
         
@@ -617,7 +629,7 @@ class TranslationService {
         let timeoutSeconds: TimeInterval = 10.0
         #endif
         
-        return try await withTimeout(timeoutSeconds) {  // Simulator can be much slower
+        let rawResult = try await withTimeout(timeoutSeconds) {  // Simulator can be much slower
             try await withCheckedThrowingContinuation { continuation in
                 self.processingQueue.async {
                     do {
@@ -636,6 +648,22 @@ class TranslationService {
                 }
             }
         }
+        
+        // Apply glossary post-translation for Opus models
+        // (Opus models are encoder-decoder and don't take instructions, so we force replace terms)
+        let (finalText, applied) = GlossaryService.shared.applyGlossary(
+            to: rawResult,
+            sourceLanguage: sourceLanguage.id,
+            targetLanguage: targetLanguage.id,
+            phase: .postTranslation
+        )
+        
+        if !applied.isEmpty {
+            DebugLogger.translation("Applied \(applied.count) glossary terms post-translation", level: .info)
+            GlossaryService.shared.batchIncrementUsage(for: applied)
+        }
+        
+        return finalText
     }
     
     private func runModelInference(
